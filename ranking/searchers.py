@@ -145,14 +145,14 @@ class Searcher:
 		# Rank nodes using subgraph
 		scores = ranker.rank_nodes(graph, limit=limit, return_type=rtype, **self.params)
 
-		# Adds the score to the nodes and writes to disk. A stupid cast 
+		# Adds the score to the nodes and writes to disk. A stupid cast
 		# is required because write_gexf can't handle np.float64
 		scores = {nid: float(score) for nid, score in scores.items()}
 		nx.set_node_attributes(graph, "score", scores)
 
 		# nx.write_gexf(graph, utils.get_graph_file_name(model_folder, query))
 
-		# Returns the top values of the type of node of interest 
+		# Returns the top values of the type of node of interest
 		results = get_top_nodes(graph, scores.items(), limit=limit, return_type=rtype)
 
 		# Add to class object for future access
@@ -179,7 +179,7 @@ class GoogleScholarSearcher:
 				# First line is the query, the others are the results from GoogleScholar
 				query = file.readline().strip()
 
-				# Use this set to remove duplicate, although slightly 
+				# Use this set to remove duplicate, although slightly
 				# different text for the same publication is very possible
 				unique = set()
 				titles = []
@@ -210,9 +210,9 @@ class GoogleScholarSearcher:
 
 class ArnetMinerSearcher:
 	"""
-	Results from ArnetMiner that were previously collected, processed 
-	and stored in disk. Right now we are only storing for the manual 
-	set, because it doesn't make sense to evaluate for the other sets. 
+	Results from ArnetMiner that were previously collected, processed
+	and stored in disk. Right now we are only storing for the manual
+	set, because it doesn't make sense to evaluate for the other sets.
 	"""
 
 	def __init__(self):
@@ -227,7 +227,7 @@ class ArnetMinerSearcher:
 				# First line is the query, the others are the results from GoogleScholar
 				query = file.readline().strip()
 
-				# Use set to remove duplicate, although slightly different 
+				# Use set to remove duplicate, although slightly different
 				# text for the same publication is very possible
 				self.results[query] = set()
 				for line in file:
@@ -279,7 +279,7 @@ class PageRankFilterBeforeSearcher():
 	def __init__(self):
 		self.index = Index(config.INDEX_PATH)
 
-		# Get all possible edges 
+		# Get all possible edges
 		self.edges = model.get_all_edges()
 
 
@@ -338,7 +338,7 @@ class PageRankFilterAfterSearcher():
 
 			cPickle.dump(self.pr, open(pr_file_path, "w"))
 
-		# Else, just loads it 
+		# Else, just loads it
 		else:
 			self.pr = cPickle.load(open(pr_file_path, 'r'))
 
@@ -481,7 +481,7 @@ class TopCitedGlobalSearcher:
 			if doc_id in (self.ncitations):
 				ncitations.append((self.ncitations[doc_id], doc_id))
 
-		# Sort by number of citations and returned top entries		
+		# Sort by number of citations and returned top entries
 		_citations, ids = zip(*sorted(ncitations, reverse=True))
 		return ids[:limit]
 
@@ -570,7 +570,7 @@ class CiteRankSearcher():
 			# Calculate the median to use in the missing values
 			year_median = np.median(years.values())
 
-			# Create a personalization array by exponentially decaying 
+			# Create a personalization array by exponentially decaying
 			# each paper's factor by its age
 			pers = {}
 			for node in g.nodes():
@@ -617,6 +617,85 @@ class CiteRankSearcher():
 		return results
 
 
+class WeightedTopCitedSubgraphSearcher(BaseSearcher):
+	"""
+	Ranks by the weighted citations included in the induced subgraph
+	(see ModelBuilder for details).
+	"""
+
+	def __init__(self, **params):
+		self.params = params
+
+	def name(self):
+		return "WeightedTopCited(G)"
+
+	def set_params(self, **params):
+		for k, v in params.items():
+			self.params[k] = v
+
+	def set_param(self, name, value):
+		self.params[name] = value
+
+	def search(self, query, exclude=[], limit=50, force=False, yc=2013):
+
+		graph = build_graph(query,
+							self.params['K'],
+							self.params['H'],
+							self.params['min_topic_lift'],
+							self.params['min_ngram_lift'],
+							exclude, force, load=True)
+
+
+		# Remove isolated nodes
+		graph.remove_nodes_from(nx.isolates(graph))
+
+		# Simple method to check if node is a document node.
+		is_pub = lambda n: (graph.node[n]["type"] == "paper")
+
+		# Get year median to replace missing values.
+		# npapers = 0
+		years = []
+		for u in graph.nodes() :
+			if is_pub(u) :
+				# npapers += 1
+				if (graph.node[u]["year"] > 0) :
+					years.append(graph.node[u]["year"])
+
+		year_median = np.median(years)
+
+		yo = 1950
+		wcits = defaultdict(float)
+		for u in graph.nodes():
+			if is_pub(u):
+				weighted_citation = 0
+				nc = 0 # citation count
+
+				year = graph.node[u]["year"]
+				if year == 0: # missing
+					year = year_median
+				elif year < yo or year > yc: # truncate
+					year = max(min(year, yc), yo)
+				age_decay = np.exp(-self.params["age_relev"]*(yc-year))
+
+				query_sim = np.exp(-self.params["query_relev"]*(1.0-graph.node[u]["query_score"]))
+
+				in_edges = graph.in_edges(u, data=True)
+				for v, _, atts in in_edges:
+					if is_pub(v):
+						ctx_sim = np.exp(-self.params["ctx_relev"]*(1.0-atts["weight"]))
+						weighted_citation += ctx_sim*query_sim*age_decay
+						nc += 1
+
+				if nc > 0:
+					weighted_citation = weighted_citation*nc**(-self.params["beta"])
+				wcits[graph.node[u]["entity_id"]] = weighted_citation
+
+		# Sort dict by value
+		sorted_wcits = sorted(wcits.items(), key=(lambda (k, v): v), reverse=True)
+		ids, _wcits = zip(*sorted_wcits)
+		return ids[:limit]
+
+
 if __name__ == '__main__':
 	gs = ArnetMinerSearcher()
 	r = gs.search("sentiment analysis", limit=10)
@@ -631,7 +710,7 @@ if __name__ == '__main__':
 
 #	for id in pub_ids :
 #		print id
-				
-		
-	
-	
+
+
+
+

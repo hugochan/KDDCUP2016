@@ -120,7 +120,7 @@ def pagerank(G,alpha=0.85, pers=None, max_iter=100,
 #								l[nbr][node_types[n]]+= dx
 # 							if node_types[nbr]==0 :
 # 								print node_types[nbr], dx
-# 								print 
+# 								print
 
 					x[n]+=danglesum+(1-alpha)*pers[n]
 #					l[n][4]+=danglesum+(1.0-alpha)*pers[n]
@@ -143,10 +143,10 @@ def pagerank(G,alpha=0.85, pers=None, max_iter=100,
 															'in %d iterations.'%(i-1))
 			i+=1
 
-	# Returns: 
-	#   x: PageRank of each node; 
+	# Returns:
+	#   x: PageRank of each node;
 	#   l: Detailed contributions of each layer;
-	#   i: Iterations to converge. 
+	#   i: Iterations to converge.
 	return x, i
 
 
@@ -189,8 +189,8 @@ def rank_nodes(graph, papers_relev=0.2,
 	log.debug("Transitions paper -> x: paper=%.3f, author=%.3f, topics=%.3f, words=%.3f" %
 										(rho_papers, rho_authors, rho_topics, rho_words))
 
-	# Transition probabilities between layers. The rows and columns correspond to 
-	# the papers, authors, topics and words layers. So for example, the value at 
+	# Transition probabilities between layers. The rows and columns correspond to
+	# the papers, authors, topics and words layers. So for example, the value at
 	# (i,j) is the probability of the random walker to go from layer i to layer j.
 	rho = np.array([[ rho_papers,      rho_authors,      rho_topics,      rho_words,     rho_venues],
 									[rho_authors,  1.0-rho_authors,               0,              0,              0],
@@ -201,12 +201,12 @@ def rank_nodes(graph, papers_relev=0.2,
 	# Maps the layers name to the dimensions
 	layers = {"paper":0, "author":1, "topic":2, "ngram":3, "venue":4}
 
-	# Alias vector to map nodes into their types (paper, author, etc.) already 
+	# Alias vector to map nodes into their types (paper, author, etc.) already
 	# as their numeric representation (paper=0, author=1, etc.) as listed above.
 	node_types = {u: layers[graph.node[u]["type"]] for u in graph.nodes()}
 
 	# Quick alias method to check if the node is paper
-	is_paper = lambda n: (node_types[n]==0) 
+	is_paper = lambda n: (node_types[n]==0)
 
 	# Remove layers if corresponding rho is zero
 	for n in graph.nodes() :
@@ -219,21 +219,21 @@ def rank_nodes(graph, papers_relev=0.2,
 	graph.remove_nodes_from(nx.isolates(graph))
 
 #	print graph.number_of_nodes()
-	
+
 	# Assemble our personalization vector according to similarity to the query provided.
 	# Only paper nodes get teleported to, so other layers get 0 as factors.
-	# Get year median to replace missing values. 
+	# Get year median to replace missing values.
 	npapers = 0
 	years = []
 	query_scores = {}
 	for u in graph.nodes() :
 		if is_paper(u) :
 			npapers += 1
-			query_scores[u] = float(graph.node[u]["query_score"]) 
+			query_scores[u] = float(graph.node[u]["query_score"])
 
 			if (graph.node[u]["year"] > 0) :
 				years.append(graph.node[u]["year"])
-		
+
 		# Not a publication, then not teleportation factor
 		else :
 			query_scores[u] = 0.0
@@ -246,7 +246,7 @@ def rank_nodes(graph, papers_relev=0.2,
 	ctxs_sum = defaultdict(float)
 	ctxs_n = defaultdict(int)
 
-	# Normalize weights within each kind of layer transition, e.g., normalize papers to 
+	# Normalize weights within each kind of layer transition, e.g., normalize papers to
 	# topic edges separately from papers to papers edges.
 	for u in graph.nodes() :
 
@@ -278,22 +278,22 @@ def rank_nodes(graph, papers_relev=0.2,
 
 
 			# Sum total output weight of current node (u) to each layer separately.
-			weights[node_types[v]] = max(atts['weight'], weights[node_types[v]]) 
+			weights[node_types[v]] = max(atts['weight'], weights[node_types[v]])
 
-		# Here, beside dividing by the total weight for the type of transition, we 
+		# Here, beside dividing by the total weight for the type of transition, we
 		# multiply by the probability of the transition, as given by the rho matrix.
 		for u, v, atts in out_edges:
 			from_layer = node_types[u]
 			to_layer   = node_types[v]
 
 #			if (weights[to_layer]==0) :
-#				print 
+#				print
 			atts['weight'] *= rho[from_layer][to_layer]/weights[to_layer]
 
 
-	# Create personalization dict. The probability to leap to a publication node 
+	# Create personalization dict. The probability to leap to a publication node
 	# is proportional to the similarity of that publication's text to the query.
-	# Other nodes are not leaped to. If all query scores are 0, we just use an 
+	# Other nodes are not leaped to. If all query scores are 0, we just use an
 	# uniform probability. The parameter 'query_relev' controls how much of this
 	# query weighting is applied.
 	norm = sum(query_scores.values())
@@ -317,7 +317,7 @@ def rank_nodes(graph, papers_relev=0.2,
 #		with open(stats_file, "a") as f :
 #			print >> f, "%d\t%f" % (niters, e-s)
 
-	# Write a slight modified graph to file (normalized edges and rank 
+	# Write a slight modified graph to file (normalized edges and rank
 	# value included as attribute)
 #	if out_file :
 #		for id, relevance in pg.items() :
@@ -325,7 +325,7 @@ def rank_nodes(graph, papers_relev=0.2,
 #
 #		nx.write_gexf(graph, out_file, encoding="utf-8")
 
-	# If needed, dump all the PG values to be used as init values 
+	# If needed, dump all the PG values to be used as init values
 	# in future computation to speedup convergence.
 #	if True :
 #		key_names = {0:"paper_id", 1:"author_id", 2:"topic_id", 3:"word_id"}
@@ -340,7 +340,7 @@ def rank_nodes(graph, papers_relev=0.2,
 
 
 def rank_nodes_baselines(graph, method="katz", limit=20) :
-	
+
 	# If 'graph' is a string then a path was provided, so we load the graph from it
 	if (isinstance(graph, basestring)) :
 		graph = nx.read_gexf(graph, node_type=int)
@@ -358,7 +358,7 @@ def rank_nodes_baselines(graph, method="katz", limit=20) :
 
 
 	rank = sorted(r.items(), key=lambda (k,v):v, reverse=True)
-	
+
 	results = []
 	for node_id, score in rank :
 		if graph.node[node_id]["type"]=="paper" :
@@ -368,30 +368,30 @@ def rank_nodes_baselines(graph, method="katz", limit=20) :
 			break
 
 	return results
-	
+
 
 def test_attenuators() :
 	import matplotlib.pyplot as pp
 
 	# Query score attenuator
 	o = 5
-	q = lambda x: np.exp(-5*o*(1-x))    
+	q = lambda x: np.exp(-5*o*(1-x))
 
 	x = np.linspace(0.0, 1.0, 100)
 	y = q(x)
-	
+
 	pp.ylim(0,1.05)
 	pp.plot(x, y, lw=1.5)
 	pp.show()
 
 	# Age attenuator
-# 	f = lambda x: np.exp(-5*o*(1-x)) 
+# 	f = lambda x: np.exp(-5*o*(1-x))
 
 
-	
-	
+
+
 if __name__ == '__main__':
-	
+
 	logging.basicConfig(format='%(asctime)s [%(levelname)s] : %(message)s', level=logging.INFO)
 
 # 	test_attenuators()
@@ -413,7 +413,7 @@ if __name__ == '__main__':
 # 	print "The Dense", len(graph.in_edges(637)), \
 # 											sum([a["weight"] for u,v,a in graph.in_edges(637, data=True)]), \
 # 											np.mean([graph.out_degree(u) for u,v in graph.in_edges(637)])
-# 											
+#
 # 	print "GSpan", len(graph.in_edges(296)), \
 # 									sum([a["weight"] for u,v,a in graph.in_edges(296, data=True)]), \
 # 									np.mean([graph.out_degree(u) for u,v in graph.in_edges(296)])
@@ -422,7 +422,7 @@ if __name__ == '__main__':
 	rank = rank_nodes(graph, 1.0, 1.0, 1.0, 1.0, ctx_relev=0.5, query_relev=0.5, age_relev=0.5,
 												limit=15, out_file="graphs/ranks/%s.gexf" % query)
 
-	print 
+	print
 	for node_id, paper_id, query_score, score, score_layers in rank :
 		print "{%15s,  %4d,  %3d,  %.4f} : [%.2f]   %-70s  |  %s" % (paper_id,
 																							 graph.node[node_id]["year"],

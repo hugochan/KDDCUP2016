@@ -11,7 +11,7 @@ from baselines.meng import MengSearcher
 from ranking.searchers import Searcher, PageRankSubgraphSearcher,\
 	TopCitedSubgraphSearcher, TopCitedGlobalSearcher, TFIDFSearcher, BM25Searcher,\
 	PageRankFilterBeforeSearcher, PageRankFilterAfterSearcher,\
-	GoogleScholarSearcher, ArnetMinerSearcher, CiteRankSearcher
+	GoogleScholarSearcher, ArnetMinerSearcher, CiteRankSearcher, WeightedTopCitedSubgraphSearcher
 from collections import defaultdict
 import time
 import numpy as np
@@ -50,8 +50,8 @@ def filter_newer_entries(year, results, n) :
 
 def vary_rho_values(searcher, queries, rho_param, rho_values) :
 	'''
-	Varies one given rho value and sets the others uniformly so 
-	that all sum to one. Its meant to find optimal values for each 
+	Varies one given rho value and sets the others uniformly so
+	that all sum to one. Its meant to find optimal values for each
 	layer.
 	'''
 
@@ -61,7 +61,7 @@ def vary_rho_values(searcher, queries, rho_param, rho_values) :
 	print "\nVarying parameter '%s'" % rho_param
 	for rho_value in rho_values :
 
-		# Set rho values equally such that all sum (plus rho_value) sum up to 1 
+		# Set rho values equally such that all sum (plus rho_value) sum up to 1
 		other_rhos = (1.0-rho_value)/(len(rho_params)-1)
 		for rp in rho_params :
 			searcher.set_param(rp, other_rhos)
@@ -78,9 +78,9 @@ def show_layers_effect(query_set, searcher, layers_combs):
 	'''
 	Shows performance for different layers configuration.
 	'''
-	
+
 	queries = load_query_set(query_set, 40)
-	
+
 	legend = {'P': 'papers_relev',
 						'A': 'authors_relev',
 						'K': 'words_relev',
@@ -128,11 +128,11 @@ def show_attenuators_effect(queries, searcher):
 		for att in atts:
 			searcher.set_param(legend[att], PARAMS[legend[att]])
 
-		get_search_metrics(queries, searcher, show=True, 
+		get_search_metrics(queries, searcher, show=True,
 											 results_file=(config.DATA + "results/atts/" + atts))
 
 	print
-	
+
 
 def vary_parameters(searcher, queries, name, values) :
 	'''
@@ -160,8 +160,8 @@ def show_results(query_id, results, right) :
 
 
 def save_results(results, file_path) :
-	''' 
-	Saves the results in a output file. 
+	'''
+	Saves the results in a output file.
 	'''
 	cPickle.dump(results, open(file_path, 'w'))
 
@@ -175,16 +175,16 @@ def filter_missing(ids, relevs, titles) :
 			fids.append(ids[i])
 			frelevs.append(relevs[i])
 			ftitles.append(titles[i])
-			
+
 	return fids, frelevs, ftitles
 
-	
+
 def get_search_metrics(truth, searcher, show=True, force=False, results_file=None) :
 	'''
-	Run searches on each survey (query -> ground truth) and return 
-	the evaluate metric for each instance. Right now the metrics being 
+	Run searches on each survey (query -> ground truth) and return
+	the evaluate metric for each instance. Right now the metrics being
 	returned are MAP, P@5, P@10, P@20.
-	
+
 	Returns: dict {metric: array of values}
 	'''
 	metrics = defaultdict(list)
@@ -200,14 +200,14 @@ def get_search_metrics(truth, searcher, show=True, force=False, results_file=Non
 		# GoogleScholar is treated differently, since neither the scholar
 		# returned documents, nor the pubs from the manual set are in our databases.
 		# We match the documents by text similarity and create string ids so that
-		# the rest of the evaluation can remain the same. Note that the correct_ids and 
-		# results values are replaced in the process   
+		# the rest of the evaluation can remain the same. Note that the correct_ids and
+		# results values are replaced in the process
 		if (searcher.name()=="GoogleScholar") or (searcher.name()=="ArnetMiner") :
 			correct_ids, returned_ids = match_by_title(query, returned_ids, correct_titles)
-			
-		else: 
 
-			# If not Scholar or AMiner, also remove pubs that are more recent than the 
+		else:
+
+			# If not Scholar or AMiner, also remove pubs that are more recent than the
 			# query pub, and therefore couldn't be used as a viable candidate
 			if (year != "") :
 				returned_ids = filter_newer_entries(int(year), returned_ids, 20)
@@ -258,11 +258,11 @@ def get_results_file(query_set, method_name) :
 
 	return "%s/%s.p" % (folder, method_name)
 
-	
+
 def get_layer_results(queries, searcher, folder, layer) :
-	
+
 	db = MyMySQL(db=config.DATASET)
-	
+
 	def get_pub(pub_id) :
 		return db.select_one("title", table="papers", where="id='%s'" % pub_id)
 
@@ -276,7 +276,7 @@ def get_layer_results(queries, searcher, folder, layer) :
 	def get_keyword(kw):
 		return kw
 
-	# Create the folder that will hold the results for this layer	
+	# Create the folder that will hold the results for this layer
 	if not os.path.exists(folder) :
 		os.makedirs(folder)
 
@@ -288,7 +288,7 @@ def get_layer_results(queries, searcher, folder, layer) :
 									'venue': get_venue,
 									'ngram': get_keyword}
 
-	# Now fetch the results and save them 
+	# Now fetch the results and save them
 	for query in queries :
 
 		file_path = os.path.join(folder, query.replace(' ', '+') + ".txt")
@@ -306,9 +306,9 @@ def save_layers_results_query_set(query_set) :
 	queries = load_query_set(query_set, 10)
 	queries = [query for query,_,_,_,_,_ in queries]
 
-	layers = ['paper', 
-						'author', 
-						'venue', 
+	layers = ['paper',
+						'author',
+						'venue',
 						'ngram']
 
 	searcher = Searcher(**PARAMS)
@@ -321,9 +321,9 @@ def save_layers_results_query_set(query_set) :
 
 def save_layers_results_queries(queries, folder) :
 
-	layers = ['paper', 
-						'author', 
-						'venue', 
+	layers = ['paper',
+						'author',
+						'venue',
 						'ngram']
 
 	searcher = Searcher(**PARAMS)
@@ -339,7 +339,7 @@ def check_topics_effect(searcher, query_set) :
 
 
 def time_diversity(names, query_set) :
-	
+
 
 	# Get year of each paper for assembling personalization array next
 	db = MyMySQL(db=config.DATASET)
@@ -349,7 +349,7 @@ def time_diversity(names, query_set) :
 	for name in names :
 
 		file_path = "%s/results/%s/%s/%s.p" % (config.DATA, config.DATASET, query_set, name)
-	
+
 		returned_years = []
 		results = cPickle.load(open(file_path, 'r'))
 		for _correct, _relevances, returned in results :
@@ -360,7 +360,7 @@ def time_diversity(names, query_set) :
 		print "%s\t%.2f\t%.2f" % (name, np.mean(returned_years), np.std(returned_years))
 
 
-#			print correct, relevances, returned 
+#			print correct, relevances, returned
 #			break
 
 
@@ -377,9 +377,9 @@ def main() :
 ##	check_topics_effect(Searcher(**PARAMS), "manual")
 #	show_layers_effect("manual", Searcher(**PARAMS), ["PAK", "PAT", "PAKT"][:1])
 
-#	save_layers_results_queries(["citation recommendation", 
-#															 "author recommendation", 
-#															 "link prediction"], 
+#	save_layers_results_queries(["citation recommendation",
+#															 "author recommendation",
+#															 "link prediction"],
 #															 folder="/var/tmp/results")
 #	save_layer_results("manual")
 
@@ -408,14 +408,15 @@ def main() :
 
 
 	query_sets = [
-							'manual',
+							# 'manual',
 							'surveys',
 							# 'tuning',
-							'testing'
+							#'testing'
 							]
 
 	searchers = [
 						# Searcher(**PARAMS),
+						# Searcher(**config.PARAMS),
 						# PageRankSubgraphSearcher(**PARAMS),
 						# TopCitedSubgraphSearcher(**PARAMS),
 						# TopCitedGlobalSearcher(),
@@ -426,10 +427,10 @@ def main() :
 						# PageRankFilterAfterSearcher(),
 #						GoogleScholarSearcher(),
 #						ArnetMinerSearcher(),
-						MengSearcher(),
-#						CiteseerSearcher("eval/citeseer")
+						#MengSearcher(),
+#						CiteseerSearcher("eval/citeseer"),
+						WeightedTopCitedSubgraphSearcher(**PARAMS)
 					]
-
 
 	for query_set in query_sets :
 
@@ -440,7 +441,12 @@ def main() :
 			print "%s\t" % s.name(),
 #			print "\nRunning %s with %d queries from %s set..." % \
 #																	(s.name(), len(queries), query_set)
-
+			if s.name() == "WeightedTopCited(G)":
+				s.set_params(**{
+							  'query_relev': 0.15,  # 0.15
+						      'age_relev': 0.01, # 0.01
+							  'ctx_relev': 0.6, # 0.6
+							  'beta': 0.2}) # 0.1
 			rfile = get_results_file(query_set, s.name())
 			get_search_metrics(queries, s, force=True, results_file=rfile)
 			del s

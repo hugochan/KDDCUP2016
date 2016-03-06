@@ -17,7 +17,7 @@ import re
 # Stop words to be removed from the title to make a query
 _stop_words_ = set(nltk.corpus.stopwords.words('english'))
 
-# Regex to remove some punctuation effectively 
+# Regex to remove some punctuation effectively
 _regex_ = re.compile('[%s]' % re.escape("!\"#$%&'()*+,.:;?`{|}~"))
 
 
@@ -31,7 +31,7 @@ def load_query_set(query_set, limit=100):
 
 	# Load query file
 	queries = []
-	with open(file_path) as file : 
+	with open(file_path) as file :
 		for line in file :
 			queries.append(line.strip().split('\t'))
 
@@ -44,9 +44,9 @@ def load_query_set(query_set, limit=100):
 	queries_cits = []
 	for pub_id, year, _title_, query in queries:
 
-		# Query is the file name, excluding the suffix after the char _ (numeric 
+		# Query is the file name, excluding the suffix after the char _ (numeric
 		# identifier for multiple identical queries) and replacing + by an space char
-#		query = fn[:-4].split("_")[0]     
+#		query = fn[:-4].split("_")[0]
 #		query = query.replace('+', ' ')
 
 		relevs = []
@@ -77,7 +77,7 @@ def has_similar_pub(db, index, pub_id, title, citations) :
 
 	# Fetches all document that have at least one of the terms
 	similar_pubs = index.search(title.strip(),
-													 search_fields=["title", "abstract"], 
+													 search_fields=["title", "abstract"],
 													 return_fields=["id", "title"],
 													 ignore=set([pub_id]), limit=1)
 
@@ -108,21 +108,21 @@ def to_query(title) :
 
 def save_to_file(prefix, pubs):
 	'''
-	Takes the list of pubs (id, title, query, year) and 
+	Takes the list of pubs (id, title, query, year) and
 	dumps into the given file path.
 	'''
 	file_path = prefix + ".txt"
 	with open(file_path, 'w') as file :
 		for pub_id, title, query, year in pubs :
-			print >> file, "%s\t%d\t%s\t%s" % (pub_id, year, 
-																				title.encode("UTF-8"), 
+			print >> file, "%s\t%d\t%s\t%s" % (pub_id, year,
+																				title.encode("UTF-8"),
 																				query.encode("UTF-8"))
 
 
 def write_citations_query_set_files(db, prefix1, n1, prefix2, n2) :
 	'''
-	Sample random papers meeting some criteria to be used as ground truth 
-	(title is used as query and the citations as the expected list of 
+	Sample random papers meeting some criteria to be used as ground truth
+	(title is used as query and the citations as the expected list of
 	relevant papers).
 
 	Two non overlapping sets are created to be used as tuning and testing.
@@ -133,8 +133,8 @@ def write_citations_query_set_files(db, prefix1, n1, prefix2, n2) :
 	index.attach_thread()
 
 #	random.seed(86)  #@UndefinedVariable
-	docs = db.select(["id", "title", "year"], 
-									 table="papers", 
+	docs = db.select(["id", "title", "year"],
+									 table="papers",
 									 where="use_it AND (year IS NOT NULL) AND (year != 0)")
 
 	sample = []
@@ -227,8 +227,8 @@ def check_overlap(query_set1, query_set2) :
 def write_surveys_queries_file(prefix, npubs=110) :
 
 	db = MyMySQL(db=config.DB_NAME)
-	candidates = db.select_query('''SELECT id, substring(title,1,140), year 
-																	FROM papers 
+	candidates = db.select_query('''SELECT id, substring(title,1,140), year
+																	FROM papers
 																	WHERE title LIKE '%survey%' AND (year IS NOT NULL)
 																	AND (year BETWEEN 1950 AND 2014)''')
 
@@ -237,7 +237,7 @@ def write_surveys_queries_file(prefix, npubs=110) :
 	# Include the word 'survey' for this particular case
 	_stop_words_.add("survey")
 
-	# Write candidates to file	
+	# Write candidates to file
 	file = open(prefix + ".txt", "w")
 
 	n = 0
@@ -257,7 +257,7 @@ def write_surveys_queries_file(prefix, npubs=110) :
 
 
 def write_surveys_queries(n=110) :
-	
+
 	db = MyMySQL(db=config.DB_NAME)
 
 	if not os.path.exists(config.QUERY_SETS_PATH) :
@@ -283,14 +283,14 @@ def check_ids(folder) :
 			for line in file :
 
 				relev, pub_id, title = line.strip().split('\t')
-				if (len(db.select("id", table="papers", where="id='%s'"%pub_id)) == 0) : 
+				if (len(db.select("id", table="papers", where="id='%s'"%pub_id)) == 0) :
 					print "Pub not found:", pub_id
 
 #				print pub_id, year, title
 
 
 def match_pubs(index, raw_file_path, matched_file_path) :
-	
+
 	pubs = []
 
 	# Opens raw file and skips first line
@@ -304,12 +304,12 @@ def match_pubs(index, raw_file_path, matched_file_path) :
 
 		# Fetches all document that have at least one of the terms
 		candidates = index.search(title.strip(),
-														 search_fields=["title"], 
-														 return_fields=["id", "title"], 
+														 search_fields=["title"],
+														 return_fields=["id", "title"],
 														 limit=1)
 
 		cand_id, cand_title = candidates[0]
-		
+
 		title = title.strip()
 		ctitle = cand_title.strip().encode("UTF-8")
 
@@ -326,7 +326,7 @@ def match_pubs(index, raw_file_path, matched_file_path) :
 			matched = raw_input("Matched? ")
 			if (matched!='y') :
 				cand_id = ''
-	
+
 			if matched=='q' :
 				break
 
@@ -335,7 +335,7 @@ def match_pubs(index, raw_file_path, matched_file_path) :
 
 	in_file.close()
 
-	# Now write down the file for this query. 
+	# Now write down the file for this query.
 	# Unmatched pubs will have empty ids
 	print "Saving '%s'." % matched_file_path
 	with open(matched_file_path, 'w') as out_file :
@@ -352,7 +352,7 @@ def write_manual_queries() :
 
 	raw_folder = config.DATA + "manual_raw"
 	matched_folder = config.QUERY_SETS_PATH + "manual/"
-	
+
 	# The index is used to find very similar publications
 	index = Index(config.INDEX_PATH)
 	index.attach_thread()
