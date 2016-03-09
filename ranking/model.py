@@ -31,7 +31,7 @@ db = MyMySQL(db=config.DB_NAME,
 
 
 ########################################
-## Helper methods                     
+## Helper methods
 ########################################
 
 def sorted_tuple(a, b):
@@ -155,7 +155,7 @@ def get_rules_by_lift(transactions, min_lift=1.0):
 
 
 ########################################
-## Class definitions 
+## Class definitions
 ########################################
 
 
@@ -304,6 +304,7 @@ class ModelBuilder:
                           table="graph",
                           where="citing='%s' AND cited='%s'" % (citing, cited))
 
+      if ctx == None: ctx = u''
       # Remove placeholders marked with =-= and -=-
       beg_idx = ctx.find("=-=")
       end_idx = ctx.find("-=-", beg_idx) + 3

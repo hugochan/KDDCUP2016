@@ -242,12 +242,12 @@ def get_search_metrics(truth, searcher, show=True, force=False, results_file=Non
 	if results_file :
 		save_results(results, results_file)
 
-
 	if show:
 		for m in ["MAP", "P@5", "P@10", "P@20", "R@20", "NDCG@20", "Time"] :
 			print u"%.1f \xb1 %.1f\t" % (100*np.mean(metrics[m]), np.std(metrics[m])),
 		print
 
+	import pdb;pdb.set_trace()
 	return metrics
 
 
@@ -409,13 +409,13 @@ def main() :
 
 	query_sets = [
 							# 'manual',
-							'surveys',
+							# 'surveys',
 							# 'tuning',
-							#'testing'
+							'testing'
 							]
 
 	searchers = [
-						# Searcher(**PARAMS),
+						Searcher(**PARAMS),
 						# Searcher(**config.PARAMS),
 						# PageRankSubgraphSearcher(**PARAMS),
 						# TopCitedSubgraphSearcher(**PARAMS),
@@ -429,7 +429,7 @@ def main() :
 #						ArnetMinerSearcher(),
 						#MengSearcher(),
 #						CiteseerSearcher("eval/citeseer"),
-						WeightedTopCitedSubgraphSearcher(**PARAMS)
+						# WeightedTopCitedSubgraphSearcher(**PARAMS)
 					]
 
 	for query_set in query_sets :
@@ -441,12 +441,43 @@ def main() :
 			print "%s\t" % s.name(),
 #			print "\nRunning %s with %d queries from %s set..." % \
 #																	(s.name(), len(queries), query_set)
+			if s.name() == "MultiLayered":
+				s.set_params(**{
+							  'K': 20,
+						      'H': 1,
+							  'papers_relev': 0.25,
+							  'authors_relev': 0.25,
+						   	  'words_relev': 0.25,
+							  'topics_relev' : 0.0,
+							  'venues_relev': 0.25,
+							  'alpha': 0.3,
+							  'query_relev': 0.3,
+							  'age_relev': 0.01,
+   							  'ctx_relev': 0.5})
+
+			if s.name() == "TopCited(G)": # TopCitedSubgraphSearcher
+				s.set_params(**{
+							  'K': 20,
+						      'H': 1,
+							  'papers_relev': 0.25,
+							  'authors_relev': 0.25,
+						   	  'words_relev': 0.25,
+							  'topics_relev' : 0.0,
+							  'venues_relev': 0.25,
+							  'alpha': 0.3,
+							  'query_relev': 0.3,
+							  'age_relev': 0.01,
+   							  'ctx_relev': 0.5})
+
+
 			if s.name() == "WeightedTopCited(G)":
 				s.set_params(**{
+							  'K': 20,
+						      'H': 1,
 							  'query_relev': 0.15,  # 0.15
 						      'age_relev': 0.01, # 0.01
-							  'ctx_relev': 0.6, # 0.6
-							  'beta': 0.2}) # 0.1
+							  'ctx_relev': 0.8, # 0.6 (manual), 0.8
+							  'beta': 0.1}) # 0.1
 			rfile = get_results_file(query_set, s.name())
 			get_search_metrics(queries, s, force=True, results_file=rfile)
 			del s
