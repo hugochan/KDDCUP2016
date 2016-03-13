@@ -69,7 +69,7 @@ def save_pub(pub) :
 	db.insert(into='papers', fields=name, values=values, ignore=True)
 
 
-def read_index(line, pub) : 
+def read_index(line, pub) :
 	pub['id'] = line
 
 def read_title(line, pub) :
@@ -80,24 +80,24 @@ def read_authors(line, pub):
 
 def read_affils(line, pub):
 	pub['affils'] = line.split(';')
-	
+
 def read_year(line, pub):
 	pub['year'] = line
-	
+
 def read_venue(line, pub):
 	pub['venue'] = line.strip()
 
 def read_abstract(line, pub):
 	pub['abstract'] = line
-	
+
 def read_citations(line, pub):
 	if 'citations' not in pub:
 		pub['citations'] = []
 	pub['citations'].append(int(line))
-	
+
 
 def import_pubs(file_path):
-	
+
 	handlers = {'#index' : read_index,
 							'#*' : read_title,
 #							'#@' : read_authors,
@@ -128,7 +128,7 @@ def import_pubs(file_path):
 			if id in handlers:
 				handlers[id](content.strip(), pub)
 
-		# If an exception occurs, there was no data to be 
+		# If an exception occurs, there was no data to be
 		# processed, so just skip it
 		except :
 			pass
@@ -185,15 +185,15 @@ def import_authors(file_path):
 			nauthors += 1
 			if (nauthors%1000)==0:
 				print "%d processed."%nauthors
-			
+
 			continue
 
 		try :
 			id, content = line.split(' ', 1)
 			if id in handlers:
 				handlers[id](content.strip(), author)
-				
-		# If an exception occurs, there was no data to be 
+
+		# If an exception occurs, there was no data to be
 		# processed, so just skip it
 		except:
 			pass
@@ -212,7 +212,7 @@ def import_authorships(file_path) :
 		# Buffer to avoid DB accesses
 		if len(rows)==100:
 			db.insert(into="authorships", fields=["author_id", "paper_id"], values=rows, ignore=True)
-			rows[:] = []   # Empty the list 
+			rows[:] = []   # Empty the list
 
 	db.insert(into="authorships", fields=["author_id", "paper_id"], values=rows, ignore=True)
 	file.close()
@@ -231,7 +231,7 @@ def import_coauthorships(file_path) :
 		# Buffer to avoid DB accesses
 		if len(rows)==100:
 			db.insert(into="coauthorship", fields=["author1", "author2", "npapers"], values=rows, ignore=True)
-			rows[:] = []   # Empty the list 
+			rows[:] = []   # Empty the list
 
 	db.insert(into="coauthorship", fields=["author1", "author2", "npapers"], values=rows, ignore=True)
 	file.close()
@@ -249,7 +249,7 @@ def get_citations_cdf(citing_path, cited_path) :
 
 	print u"%.3f \xb1 %.3f\t" % (np.mean(nciting), np.std(nciting))
 
-	plot.cdf(nciting, title="#Citations (citing)",	
+	plot.cdf(nciting, title="#Citations (citing)",
 					 xlabel="#Citations", ylabel="P[x $\leq$ X]",
 					 xlim=(0,80), ylim=(0.5,1.0), linewidth=2,
 					 outfile=citing_path)
@@ -260,7 +260,7 @@ def get_citations_cdf(citing_path, cited_path) :
 
 	print u"%.3f \xb1 %.3f\t" % (np.mean(ncited), np.std(ncited))
 
-	plot.cdf(ncited, title="#Citations (cited)",	
+	plot.cdf(ncited, title="#Citations (cited)",
 					 xlabel="#Citations", ylabel="P[x $\leq$ X]",
 					 xlim=(0,80), ylim=(0.5,1.0), linewidth=2,
 					 outfile=cited_path)
@@ -313,16 +313,16 @@ def fix_venues() :
 								fields=[DocField("id", stored=True, indexed=False),
 												DocField("abbrev", stored=True, indexed=True),
 												DocField("name", stored=True, indexed=True)])
-	
+
 #	db = MyMySQL(db='aminer')
 	venues = db.select(["id", "name"], table="venues")
 	for _vid, vname in venues:
-		
+
 		vname = remove_terms(vname.lower(), IGNORE_TERMS)
-		pubs, scores = index.search(vname, search_fields=["abbrev", "name"], 
+		pubs, scores = index.search(vname, search_fields=["abbrev", "name"],
 																 return_fields=["abbrev", "name"],
 																 return_scores=True, limit=3)
-		
+
 		# Show the best matches
 		print "\n---------------"
 		print vname
@@ -330,14 +330,14 @@ def fix_venues() :
 		for i in range(len(pubs)) :
 			abbrev, name = pubs[i]
 			print "  [%.3f] %s - %s" % (scores[i], abbrev, name)
-		
+
 		if len(pubs)==0 :
 			continue
 
 		if (len(scores)==1) or ((scores[0] >= 1.0) and (scores[0] >= 1.5*scores[1])) :
 			print "Matched!"
 
-#			venues_mapping[vid] = 
+#			venues_mapping[vid] =
 
 #			abbrev, name = pubs[0]
 #			if abbrev not in venues_ids :
@@ -345,15 +345,15 @@ def fix_venues() :
 #
 #			good_venues.append((pub, venues_ids[abbrev][0]))
 
-		
+
 #		print vname
-	
+
 
 
 if __name__ == '__main__':
 
 	fix_venues()
-	
+
 #	remove_duplicates()
 #	get_citations_cdf("citing.pdf", "cited.pdf")
 
@@ -361,6 +361,6 @@ if __name__ == '__main__':
 #	import_authors("/home/luamct/data/aminer/AMiner-Author.txt")
 #	import_authorships("/home/luamct/data/aminer/AMiner-Author2Paper.txt")
 #	import_coauthorships("/home/luamct/data/aminer/AMiner-Coauthor.txt")
-	
-	
-	
+
+
+

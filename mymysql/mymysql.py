@@ -24,6 +24,20 @@ class MyMySQL():
 															unix_socket="/tmp/mysql.sock",
 															**params)
 
+	def create_table(self, table_name, table_description):
+		if not isinstance(table_name, str) or not isinstance(table_description, list):
+			raise TypeError("table_name should be a string and table_description should be a list of strings")
+
+		query = "CREATE TABLE IF NOT EXISTS %s (" % table_name
+		for each in table_description[:-1]:
+			query =  query + each + ','
+		query = query + table_description[-1] + ');'
+
+		cursor = self.db.cursor(MySQLdb.cursors.Cursor)
+		cursor.execute(query)
+		# print query
+		cursor.close()
+
 
 	def select_query(self, query) :
 		'''
@@ -221,6 +235,9 @@ class MyMySQL():
 
 if __name__ == "__main__" :
 	pass
+	# import config
+	# db = MyMySQL(config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
+	# db.create_table('names',['firstname VARCHAR(10)', 'lastname VARCHAR(10)'])
 # 	import chardet
 # 	print u'\u0093'.encode('utf-8')
 

@@ -6,10 +6,11 @@ to path separators.
 
 @author: luamct
 '''
+# export PYTHONPATH=$PYTHONPATH:/Users/hugo/Documents/Study\&Work/Research/Projects/citation_networks/KDDCUP/software/FrontierGo
 
 # Main data folder and dataset to be used
-DATA = '/Users/Hugo/Documents/Study&Work/Research/Projects/citation_networks/software/data/'
-DATASET = 'csx'
+DATA = '/Users/Hugo/Documents/Study&Work/Research/Projects/citation_networks/KDDCUP/software/data/'
+DATASET = 'mag'
 #DATASET = 'aminer'
 #DATASET = 'csx_ml'
 #DATASET = 'csx_dm'
