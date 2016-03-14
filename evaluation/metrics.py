@@ -8,8 +8,8 @@ import numpy as np
 
 def apk(actual, predicted, k=10):
 	'''
-  Computes the average precision at k. Used on MAP calculation 
-  (mean AP@k over multiple queries). 
+  Computes the average precision at k. Used on MAP calculation
+  (mean AP@k over multiple queries).
   '''
 	if len(predicted)>k:
 		predicted = predicted[:k]
@@ -27,9 +27,26 @@ def apk(actual, predicted, k=10):
 	return score / min(len(actual), k)
 
 
+def ndcg2(actual, pred, relevs=None, k=20):
+	''' Normalized Discounted Cummulative Gain. '''
+
+	if not relevs :
+		relevs = [2.0]*len(actual)
+
+	pred = pred[:k]
+	relevs_dict = {actual[i]: relevs[i] for i in xrange(len(actual))}
+
+	r = [relevs_dict[item] if item in relevs_dict else 0.0 for item in pred]
+#	ideal_r = sorted(r, reverse=True)
+	ideal_r = sorted([relevs_dict[item] for item in actual], reverse=True)[:k]
+
+	idcg = dcg(ideal_r)
+	return dcg(r)/idcg if idcg!=0.0 else 0.0
+
+
 def ndcg(actual, pred, relevs=None, k=20):
 	''' Normalized Discounted Cummulative Gain. '''
-	
+
 	if not relevs :
 		relevs = ["R1"]*len(actual)
 
@@ -47,7 +64,7 @@ def ndcg(actual, pred, relevs=None, k=20):
 
 def dcg(relevs):
 	''' Discounted Cummulative Gain. '''
-	
+
 	if len(relevs) == 0 :
 		return 0.0
 

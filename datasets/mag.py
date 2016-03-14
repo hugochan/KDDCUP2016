@@ -402,7 +402,7 @@ def import_paper_keywords(file_path, table_name='paper_keywords'):
 
 
 def import_paper_refs(file_path, table_name='paper_refs'):
-    table_description = ['id BIGINT NOT NULL AUTO_INCREMENT',
+    table_description = ['id INT NOT NULL AUTO_INCREMENT',
                         'paper_id VARCHAR(30) NOT NULL',
                         'paper_ref_id VARCHAR(30) NOT NULL',
                         'PRIMARY KEY (id)',
@@ -514,6 +514,110 @@ def import_papers(file_path, table_name='papers'):
     f.close()
 
 
+def import_paper_author_affils(file_path, table_name='paper_author_affils'):
+    table_description = ['id INT NOT NULL AUTO_INCREMENT',
+                        'paper_id VARCHAR(30) NOT NULL',
+                        'author_id VARCHAR(30)',
+                        'affil_id VARCHAR(30)',
+                        # 'affil_name VARCHAR(1200)', # too long but useless
+                        'normal_affil_name VARCHAR(300)',
+                        'author_seq_num SMALLINT UNSIGNED',
+                        'PRIMARY KEY (id)',
+                        'KEY (paper_id)',
+                        'KEY (author_id)',
+                        'KEY (affil_id)']
+    db.create_table(table_name, table_description)
+
+    fields = ['paper_id', 'author_id', 'affil_id', 'normal_affil_name', 'author_seq_num']
+
+    npaper_author_affils = 0
+    paper_author_affils = []
+    try:
+        with open(file_path, 'r') as f:
+            for line in f:
+                line = line.strip(' ')
+                if line == '':
+                    continue
+
+                # Paper ID
+                # Author ID
+                # Affiliation ID
+                # Original affiliation name
+                # Normalized affiliation name
+                # Author sequence number
+                try :
+                    row = line.split('\t')
+                    if row[-1] != '': row[-1] = int(row[-1])
+                    del row[3] # delete Original affiliation name
+
+                    paper_author_affils.append(tuple(row))
+                    npaper_author_affils += 1
+
+                    if len(paper_author_affils) == 100000:
+                        db.insert(into=table_name, fields=fields, values=paper_author_affils, ignore=True)
+                        paper_author_affils[:] = []   # Empty the list
+                        print "%d processed." % npaper_author_affils
+
+
+                # If an exception occurs, there was no data to be
+                # processed, so just skip it
+                except:
+                    pass
+
+            db.insert(into=table_name, fields=fields, values=paper_author_affils, ignore=True)
+            print "totally %d processed." % npaper_author_affils
+
+    except Exception, e:
+        print e
+        sys.exit()
+
+    f.close()
+
+
+def import_paper_urls(file_path, table_name='paper_urls'):
+    table_description = ['paper_id VARCHAR(30) NOT NULL',
+                        'url VARCHAR(200)',
+                        'PRIMARY KEY (paper_id)']
+    db.create_table(table_name, table_description)
+
+    fields = ["paper_id", "url"]
+    npaper_urls = 0
+    paper_urls = []
+    try:
+        with open(file_path, 'r') as f:
+            for line in f:
+                line = line.strip(' ')
+                if line == '':
+                    continue
+
+                # Paper ID
+                # URL
+                try :
+                    paper_id, url = line.split('\t')
+                    paper_urls.append((paper_id, url))
+                    npaper_urls += 1
+
+                    if len(paper_urls) == 100000:
+                        db.insert(into=table_name, fields=fields, values=paper_urls, ignore=True)
+                        paper_urls[:] = []   # Empty the list
+                        print "%d processed." % npaper_urls
+
+
+                # If an exception occurs, there was no data to be
+                # processed, so just skip it
+                except:
+                    pass
+
+            db.insert(into=table_name, fields=fields, values=paper_urls, ignore=True)
+            print "totally %d processed." % npaper_urls
+
+    except Exception, e:
+        print e
+        sys.exit()
+
+    f.close()
+
+
 def import_field_of_study(file_path, table_name='field_of_study'):
     table_description = ['id VARCHAR(30) NOT NULL',
                         'name VARCHAR(200) NOT NULL',
@@ -611,5 +715,6 @@ def import_fields_of_study_hierarchy(file_path, table_name='fields_of_study_hier
 
 
 if __name__ == '__main__':
-    import_papers(config.DATA + 'Papers/Papers.txt')
+    # import_papers(config.DATA + 'Papers/Papers.txt')
+    import_paper_author_affils('/Volumes/Mixed-Data/data/MAG/PaperAuthorAffiliations/PaperAuthorAffiliations.txt')
     # pass
