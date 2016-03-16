@@ -5,109 +5,132 @@ Created on Mar 13, 2016
 '''
 from mymysql.mymysql import MyMySQL
 import config
-# from evaluation.query_sets import load_query_set
-# from baselines.meng import MengSearcher
-# from ranking.searchers import Searcher, PageRankSubgraphSearcher,\
-#     TopCitedSubgraphSearcher, TopCitedGlobalSearcher, TFIDFSearcher, BM25Searcher,\
-#     PageRankFilterBeforeSearcher, PageRankFilterAfterSearcher,\
-#     GoogleScholarSearcher, ArnetMinerSearcher, CiteRankSearcher, WeightedTopCitedSubgraphSearcher
 from collections import defaultdict
 import time
-import numpy as np
 
 # import logging as log
 import os
 import cPickle
 # from baselines.scholar import match_by_title
-from evaluation.metrics import ndcg
-#warnings.filterwarnings('error')
-
+from evaluation.metrics import ndcg2
+from datasets.mag import get_selected_pubs
+from ranking.kddcup_searchers import simple_search, SimpleSearcher
 
 # log.basicConfig(format='%(asctime)s [%(levelname)s] : %(message)s', level=log.INFO)
 
 db = MyMySQL(db=config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
 
-def simple_selected_ranking(conf_name=None, year=None):
-    """Try ranking affliations in previous years' conferences (each year each conference)
-    based on how many of their papers were accepted by that conference in that year.
+
+def calc_ground_truth_score(selected_affils, conf_name, year="2015"): # {paper_id: {author_id:[affil_id,],},}
     """
+    Uses latest pub records to estimate ground truth scores.
+    """
+    ground_truth = simple_search(selected_affils, conf_name, year)
 
-    # Check parameter types
-    if isinstance(conf_name, basestring):
-        conf_name_str = "('%s')"%str(conf_name)
+    return ground_truth
 
-    elif hasattr(conf_name, '__iter__'): # length of tuple should be larger than 1, otherwise use string
-        conf_name_str = str(tuple(conf_name))
+def calc_ndcg(ground_truth, pred):
+    actual, relevs = zip(*ground_truth)
+    metric = ndcg2(actual, pred, relevs, k=len(actual))
 
+    return metric
+
+def get_results_file(conf_name, method_name) :
+    folder = "%sresults/%s" % (config.DATA, conf_name)
+    if not os.path.exists(folder) :
+        os.makedirs(folder)
+
+    return "%s/%s.tsv" % (folder, method_name)
+
+
+def save_results(conf_id, results, file_path) :
+    '''
+    Saves the results in a output file.
+    '''
+    # cPickle.dump(results, open(file_path, 'w'))
+    # write to tsv file
+    try:
+        f = open(file_path, 'w+')
+    except Exception, e:
+        print e
+        return
+
+    for affil_id, score in results:
+        # [conference id] \t [affiliation id] \t [probability score] \n
+        f.writelines("%s\t%s\t%s\n"%(conf_id, affil_id, score))
+    f.close()
+
+
+def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher, show=True, results_file=None) :
+    '''
+    Run searches on each conference (conference -> ground truth) and return
+    the evaluate metric for each instance. Right now the metrics being
+    returned is NDCG.
+
+    Returns: dict {metric: value}
+    '''
+    metrics = defaultdict(list)
+    conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
+    start = time.time()
+
+    if searcher.name() == "SimpleSearcher":
+        results = searcher.search(selected_affils, conf_name, year)
     else:
-        raise TypeError("Parameter 'conf_name' is of unsupported type. String or iterable needed.")
+        results = searcher.search(selected_affils, conf_name)
 
-    if isinstance(year, basestring):
-        year_str = "(%s)"%str(year)
+    metrics["Time"] = time.time() - start
 
-    elif hasattr(year, '__iter__'): # length of tuple should be larger than 1, otherwise use string
-        year_str = str(tuple(year))
+    actual, relevs = zip(*ground_truth)
+    pred = zip(*results)[0]
 
-    else:
-        raise TypeError("Parameter 'year' is of unsupported type. String or iterable needed.")
+    metrics["NDCG"] = ndcg2(actual, pred, relevs, k=len(actual))
 
 
-    year_cond = "selected_papers.year IN %s"%year_str if year else ""
-    conf_name_cond = "selected_papers.venue_abbr_name IN %s"%conf_name_str if conf_name else ""
+    if results_file:
+        save_results(conf_id, results, results_file)
 
-    if year_cond != '' and conf_name_cond != '':
-        where_cond = '%s AND %s'%(year_cond, conf_name_cond)
-    elif year_cond == '' and conf_name_cond != '':
-        where_cond = conf_name_cond
-    elif year_cond != '' and conf_name_cond == '':
-        where_cond = year_cond
-    else:
-        where_cond = None
+    if show:
+        for k, v in metrics.iteritems():
+            print u"%s: %.1f\t" % (k, v)
+        print
 
-    rst = db.select(['selected_papers.id', 'paper_author_affils.author_id', 'paper_author_affils.affil_id'], \
-            ['selected_papers', 'paper_author_affils'], join_on=['id', 'paper_id'], \
-            where=where_cond)
+    return metrics
 
-    # re-pack data to this format: {paper_id: {author_id:[affil_id,],},}
-    pub_records = defaultdict()
-    for paper_id, author_id, affil_id in rst:
-        if pub_records.has_key(paper_id):
-            if pub_records[paper_id].has_key(author_id):
-                pub_records[paper_id][author_id].append(affil_id)
-            else:
-                pub_records[paper_id][author_id] = [affil_id]
-        else:
-            pub_records[paper_id] = {author_id: [affil_id]}
+def main():
 
-    return pub_records
+    confs = [
+                "SIGIR", # Phase 1
+                "SIGMOD",
+                "SIGCOMM",
 
-def calc_ground_truth_score(pub_records): # {paper_id: {author_id:[affil_id,],},}
-    affil_scores = defaultdict()
-    for paper, record in pub_records.iteritems():
-        score1 = 1.0 / len(record)
-        for author, affils in record.iteritems():
-            score2 = score1 / len(affils)
-            for each in affils:
-                try:
-                    affil_scores[each] += score2
-                except:
-                    affil_scores[each] = score2
+                "KDD", # Phase 2
+                "ICML",
 
+                "FSE", # Phase 3
+                "MobiCom",
+                "MM",
+            ]
 
-    # we only rank the selected affiliations
-    selected_affils = db.select('id', 'selected_affils')
-    selected_affil_scores = defaultdict()
-    for each in selected_affils:
-        try:
-            selected_affil_scores[each] = affil_scores[each]
-        except:
-            pass
+    searchers = [
+                    SimpleSearcher(),
 
-    selected_affil_scores  = sorted(selected_affil_scores.items(), key=lambda d: d[1], reverse=True)
-    return selected_affil_scores
+                ]
+
+    # import pdb;pdb.set_trace()
+    selected_affils = db.select(fields="id", table="selected_affils")
+    for c in confs :
+        # log.info("Running '%s' conf.\n" % c)
+        print "Running on '%s' conf." % c
+        ground_truth = calc_ground_truth_score(selected_affils, c)
+
+        for s in searchers :
+            print "Running %s." % s.name()
+            rfile = get_results_file(c, s.name())
+            year = ["2011", "2012", "2013", "2014"] if s.name() == "SimpleSearcher" else None
+            get_search_metrics(selected_affils, ground_truth, c, year, s, results_file=rfile)
+            del s
+        print
 
 
 if __name__ == "__main__":
-    import pdb;pdb.set_trace()
-    pub_records = simple_selected_ranking("KDD", "2013")
-    ranking = calc_ground_truth_score(pub_records)
+    main()

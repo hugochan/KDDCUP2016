@@ -247,7 +247,6 @@ def get_search_metrics(truth, searcher, show=True, force=False, results_file=Non
 			print u"%.1f \xb1 %.1f\t" % (100*np.mean(metrics[m]), np.std(metrics[m])),
 		print
 
-	import pdb;pdb.set_trace()
 	return metrics
 
 

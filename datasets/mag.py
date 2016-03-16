@@ -5,11 +5,10 @@ Created on Mar. 10, 2016
 '''
 from collections import defaultdict
 from mymysql.mymysql import MyMySQL
-# from utils import progress, plot
+from exceptions import TypeError
 import sys
 import config
 import chardet
-# from pylucene import Index, DocField
 
 
 db = MyMySQL(config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
@@ -712,6 +711,105 @@ def import_fields_of_study_hierarchy(file_path, table_name='fields_of_study_hier
         sys.exit()
 
     f.close()
+
+
+
+def get_selected_docs(conf_name=None, year=None):
+    """
+    Get pub records from selected conferences in selected years.
+    """
+
+    # Check parameter types
+    if isinstance(conf_name, basestring):
+        conf_name_str = "('%s')"%str(conf_name)
+
+    elif hasattr(conf_name, '__iter__'): # length of tuple should be larger than 1, otherwise use string
+        conf_name_str = str(tuple(conf_name))
+
+    else:
+        raise TypeError("Parameter 'conf_name' is of unsupported type. String or iterable needed.")
+
+    if isinstance(year, basestring):
+        year_str = "(%s)"%str(year)
+
+    elif hasattr(year, '__iter__'): # length of tuple should be larger than 1, otherwise use string
+        year_str = str(tuple(year))
+
+    else:
+        raise TypeError("Parameter 'year' is of unsupported type. String or iterable needed.")
+
+
+    year_cond = "selected_papers.year IN %s"%year_str if year else ""
+    conf_name_cond = "selected_papers.venue_abbr_name IN %s"%conf_name_str if conf_name else ""
+
+    if year_cond != '' and conf_name_cond != '':
+        where_cond = '%s AND %s'%(year_cond, conf_name_cond)
+    elif year_cond == '' and conf_name_cond != '':
+        where_cond = conf_name_cond
+    elif year_cond != '' and conf_name_cond == '':
+        where_cond = year_cond
+    else:
+        where_cond = None
+
+    rst = db.select('id', 'selected_papers', where=where_cond)
+
+    return rst
+
+
+def get_selected_pubs(conf_name=None, year=None):
+    """
+    Get pub records from selected conferences in selected years.
+    """
+
+    # Check parameter types
+    if isinstance(conf_name, basestring):
+        conf_name_str = "('%s')"%str(conf_name)
+
+    elif hasattr(conf_name, '__iter__'): # length of tuple should be larger than 1, otherwise use string
+        conf_name_str = str(tuple(conf_name))
+
+    else:
+        raise TypeError("Parameter 'conf_name' is of unsupported type. String or iterable needed.")
+
+    if isinstance(year, basestring):
+        year_str = "(%s)"%str(year)
+
+    elif hasattr(year, '__iter__'): # length of tuple should be larger than 1, otherwise use string
+        year_str = str(tuple(year))
+
+    else:
+        raise TypeError("Parameter 'year' is of unsupported type. String or iterable needed.")
+
+
+    year_cond = "selected_papers.year IN %s"%year_str if year else ""
+    conf_name_cond = "selected_papers.venue_abbr_name IN %s"%conf_name_str if conf_name else ""
+
+    if year_cond != '' and conf_name_cond != '':
+        where_cond = '%s AND %s'%(year_cond, conf_name_cond)
+    elif year_cond == '' and conf_name_cond != '':
+        where_cond = conf_name_cond
+    elif year_cond != '' and conf_name_cond == '':
+        where_cond = year_cond
+    else:
+        where_cond = None
+
+    rst = db.select(['selected_papers.id', 'paper_author_affils.author_id', 'paper_author_affils.affil_id'], \
+            ['selected_papers', 'paper_author_affils'], join_on=['id', 'paper_id'], \
+            where=where_cond)
+
+
+    # re-pack data to this format: {paper_id: {author_id:[affil_id,],},}
+    pub_records = defaultdict()
+    for paper_id, author_id, affil_id in rst:
+        if pub_records.has_key(paper_id):
+            if pub_records[paper_id].has_key(author_id):
+                pub_records[paper_id][author_id].append(affil_id)
+            else:
+                pub_records[paper_id][author_id] = [affil_id]
+        else:
+            pub_records[paper_id] = {author_id: [affil_id]}
+
+    return pub_records
 
 
 if __name__ == '__main__':

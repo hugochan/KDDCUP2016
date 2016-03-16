@@ -21,7 +21,7 @@ class MyMySQL():
 															user=user,
 															passwd=passwd,
 															charset="utf8",
-															unix_socket="/tmp/mysql.sock",
+															unix_socket="/tmp/mysql.sock", # /var/run/mysqld/mysqld.sock
 															**params)
 
 	def create_table(self, table_name, table_description):
