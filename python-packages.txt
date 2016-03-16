@@ -1,0 +1,8 @@
+numpy
+scipy
+MySQLdb
+networkx
+nltk
+sklearn
+lxml
+lucene

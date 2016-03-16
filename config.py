@@ -63,7 +63,8 @@ MIN_TOPIC_VALUE = 0.1
 #  + both: Both of the above. Still applies the MIN_NGRAM_TFIDF threshold though,
 #          however extracted keywords have value 1.0, so they'll always get in.
 
-KEYWORDS = "ngrams"
+# KEYWORDS = "ngrams"
+KEYWORDS = "keywords"
 
 # The placeholders are for parameters <dataset>, <K> and <H>, correspondingly
 IN_MODELS_FOLDER = DATA + "models/%d_%d"

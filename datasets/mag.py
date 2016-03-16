@@ -723,8 +723,13 @@ def get_selected_docs(conf_name=None, year=None):
     if isinstance(conf_name, basestring):
         conf_name_str = "('%s')"%str(conf_name)
 
-    elif hasattr(conf_name, '__iter__'): # length of tuple should be larger than 1, otherwise use string
-        conf_name_str = str(tuple(conf_name))
+    elif hasattr(conf_name, '__iter__'):
+        if len(conf_name) == 0:
+            return []
+        elif len(conf_name) == 1:
+            conf_name_str = "(%s)" % conf_name[0]
+        else:
+            conf_name_str = str(tuple(conf_name))
 
     else:
         raise TypeError("Parameter 'conf_name' is of unsupported type. String or iterable needed.")
@@ -732,8 +737,13 @@ def get_selected_docs(conf_name=None, year=None):
     if isinstance(year, basestring):
         year_str = "(%s)"%str(year)
 
-    elif hasattr(year, '__iter__'): # length of tuple should be larger than 1, otherwise use string
-        year_str = str(tuple(year))
+    elif hasattr(year, '__iter__'):
+        if len(year) == 0:
+            return []
+        elif len(year) == 1:
+            year_str = "(%s)" % year[0]
+        else:
+            year_str = str(tuple(year))
 
     else:
         raise TypeError("Parameter 'year' is of unsupported type. String or iterable needed.")

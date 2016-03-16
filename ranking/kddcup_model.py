@@ -30,6 +30,26 @@ db = MyMySQL(db=config.DB_NAME,
 
 
 
+def get_all_edges(papers):
+  """
+  Retrieve all edges related to given papers from the database.
+  """
+  if hasattr(papers, '__iter__'):
+    if len(papers) == 0:
+      return []
+    elif len(papers) == 1:
+      paper_str = "(%s)" % papers[0]
+    else:
+      paper_str = str(tuple(paper))
+    else:
+      raise TypeError("Parameter 'papers' is of unsupported type. Iterable needed.")
+
+  rows = db.select(fields=["paper_id", "paper_ref_id"], table="paper_refs",
+            where="paper_id IN %s OR paper_ref_id IN %s"%(paper_str, paper_str))
+
+  return rows
+
+
 def show_stats(graph):
   print "%d nodes and %d edges." % (graph.number_of_nodes(), graph.number_of_edges())
 
@@ -196,27 +216,16 @@ class ModelBuilder:
     # self.index = Index(config.INDEX_PATH, similarity="tfidf")
 
     # Graph structure that allows fast access to nodes and edges
-    self.edges_lookup = GraphBuilder(get_all_edges())
+    # self.edges_lookup = GraphBuilder(get_all_edges())
 
     # If attributes should be fetched and included in the model for each type of node.
     # Should be true for visualization and false for pure relevance calculation.
     self.include_attributes = include_attributes
 
-    # # Pre-load the year and venue of each publication for faster access later
-    # self.pub_years = {}
-    # self.pub_venues = {}
-    # rows = db.select(fields=["id", "year", "jornal_id", "conf_id"], table="papers")
-    # for pub, year, jornal_id, conf_id in rows:
-    #   self.pub_years[str(pub)] = int(year or 0)
-    #   if jornal_id:
-    #     self.pub_venues[pub] = jornal_id
-    #   elif conf_id:
-    #     self.pub_venues[pub] = conf_id
-
 
     # Create a helper boolean to check if citation contexts are
     # going to be used (some datasets don't have it available)
-    self.use_contexts = (config.DATASET == 'csx')
+    # self.use_contexts = (config.DATASET == 'csx')
 
     # Load vocabulary for the tokens in the citation contexts
     # if self.use_contexts:
@@ -238,8 +247,12 @@ class ModelBuilder:
     # Fetches all document that have at least one of the terms
     docs = get_selected_docs(conf_name, year)
 
+    self.edges_lookup = GraphBuilder(get_all_edges(docs))
+
+
+
     # Get doc ids as uni-dimensional list
-    nodes = set([str(doc) for doc in docs])
+    nodes = set(docs)
     new_nodes = nodes
 
     # We hop h times including all the nodes from these hops
@@ -683,8 +696,8 @@ def get_paper_based_coauthorships(self, papers, weighted=True):
     elif config.KEYWORDS == "both":
       where += " AND (value>=%f)" % config.MIN_NGRAM_TFIDF
 
-    rows = db.select(fields=["paper_id", "ngram"],
-             table="doc_kws",
+    rows = db.select(fields=["paper_id", "keyword_name"],
+             table="paper_keywords",
              where=where)
 
     #
@@ -766,7 +779,7 @@ def get_paper_based_coauthorships(self, papers, weighted=True):
 
   def assemble_layers(self, pubs, citation_edges,
             authors, coauth_edges, auth_edges,
-            topics, topic_topic_edges, paper_topic_edges,
+            # topics, topic_topic_edges, paper_topic_edges,
             ngrams, ngram_ngram_edges, paper_ngram_edges,
             venues, pub_venue_edges,
             affils, author_affil_edges):
@@ -780,7 +793,7 @@ def get_paper_based_coauthorships(self, papers, weighted=True):
     # etc.) to the new unique nodes id.
     pubs_ids = {}
     authors_ids = {}
-    topics_ids = {}
+    # topics_ids = {}
     words_ids = {}
     venues_ids = {}
     affils_ids = {}
@@ -1016,7 +1029,7 @@ def get_affils_layer(self, authors):
 
     graph = self.assemble_layers(pubs, citation_edges,
                    authors, coauth_edges, auth_edges,
-                   None, None, None,
+                   # None, None, None,
                    #                                                        topics, topic_topic_edges, pub_topic_edges,
                    words, word_word_edges, pub_word_edges,
                    venues, pub_venue_edges,
