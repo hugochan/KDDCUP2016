@@ -6,31 +6,32 @@ Created on Mar 14, 2016
 
 from datasets.mag import get_selected_pubs
 from collections import defaultdict
+from ranking.kddcup_ranker import rank_nodes
 
 
 builder = None
 
-def build_graph(query, conf_name, K, H, min_topic_lift, min_ngram_lift, exclude=[], force=False, save=True, load=False):
+def build_graph(conf_name, year, H, min_topic_lift, min_ngram_lift, exclude=[], force=False, save=True, load=False):
     """
     Utility method to build and return the graph model. First we check if a graph file
     exists. If not, we check if the builder class is already instantiated. If not, we do
     it and proceed to build the graph.
     """
     global builder
-    model_folder = config.IN_MODELS_FOLDER % (config.DATASET, K, H)
+    model_folder = config.IN_MODELS_FOLDER % (config.DATASET, H)
 
     # Creates model folder if non existing
     if not os.path.exists(model_folder):
         os.makedirs(model_folder)
 
-    graph_file = utils.get_graph_file_name(query, model_folder)
+    graph_file = utils.get_graph_file_name(conf_name, model_folder)
     if force or (not os.path.exists(graph_file)):
 
         if not builder:
             builder = model.ModelBuilder()
 
         # Builds the graph file
-        graph = builder.build(query, K, H, min_topic_lift, min_ngram_lift, exclude)
+        graph = builder.build(conf_name, year, H, min_topic_lift, min_ngram_lift, exclude)
 
         # Stores gexf copy for caching purposes
         if save:
@@ -137,14 +138,14 @@ class Searcher:
         return self.graph
 
 
-    def search(self, query, exclude=[], limit=20, rtype="paper", force=False):
+    def search(self, selected_affils, conf_name, year, exclude=[], rtype="affil", force=False):
         """
         Checks if the graph model already exists, otherwise creates one and
         runs the ranking on the nodes.
         """
-        graph = build_graph(query,
-                            self.params['K'],
+        graph = build_graph(conf_name,
                             self.params['H'],
+                            year,
                             self.params['min_topic_lift'],
                             self.params['min_ngram_lift'],
                             exclude, force, load=True, save=self.save)
@@ -153,7 +154,7 @@ class Searcher:
         self.nnodes = graph.number_of_nodes()
 
         # Rank nodes using subgraph
-        scores = ranker.rank_nodes(graph, limit=limit, return_type=rtype, **self.params)
+        scores = rank_nodes(graph, selected_affils, return_type=rtype, **self.params)
 
         # Adds the score to the nodes and writes to disk. A stupid cast
         # is required because write_gexf can't handle np.float64

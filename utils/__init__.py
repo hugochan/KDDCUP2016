@@ -6,7 +6,7 @@ Created on Apr 20, 2014
 import sys
 from mymysql.mymysql import MyMySQL
 import config
-from collections import defaultdict 
+from collections import defaultdict
 import nltk
 import re
 import os
@@ -121,13 +121,12 @@ def read_text(doc_id):
     return unicode(f.read(), "UTF-8")
 
 
-def get_graph_file_name(query, folder=None, extension="gexf") :
+def get_graph_file_name(conf_name, folder=None, extension="gexf") :
   '''
   Strip empty spaces from extremities, convert to lower case
   and replace problematic characters for the file system by +
   '''
-  query = query.strip().lower()
-  path = query.replace(" ", "+").replace("/", "+")
+  path = conf_name.replace(" ", "+").replace("/", "+")
   if extension:
     path = "%s.%s" % (path, extension)
 

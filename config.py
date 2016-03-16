@@ -66,7 +66,7 @@ MIN_TOPIC_VALUE = 0.1
 KEYWORDS = "ngrams"
 
 # The placeholders are for parameters <dataset>, <K> and <H>, correspondingly
-IN_MODELS_FOLDER = DATA + "models/%s_%d_%d"
+IN_MODELS_FOLDER = DATA + "models/%d_%d"
 OUT_MODELS_FOLDER = "out_models"
 
 
@@ -80,6 +80,7 @@ PARAMS = {
 	'words_relev': 0.25,
 	'topics_relev' : 0.0,
 	'venues_relev': 0.25,
+	'affils_relev': 0.25,
 	'alpha': 0.3,
 	'query_relev': 5.0,
 	'age_relev': 0.005,
