@@ -13,8 +13,9 @@ import os
 import cPickle
 # from baselines.scholar import match_by_title
 from evaluation.metrics import ndcg2
-from datasets.mag import get_selected_pubs
+from datasets.mag import get_selected_docs
 from ranking.kddcup_searchers import simple_search, SimpleSearcher
+
 
 # log.basicConfig(format='%(asctime)s [%(levelname)s] : %(message)s', level=log.INFO)
 
@@ -61,7 +62,7 @@ def save_results(conf_id, results, file_path) :
     f.close()
 
 
-def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher, show=True, results_file=None) :
+def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher, exclude_papers=[], show=True, results_file=None) :
     '''
     Run searches on each conference (conference -> ground truth) and return
     the evaluate metric for each instance. Right now the metrics being
@@ -73,10 +74,7 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
     start = time.time()
 
-    if searcher.name() == "SimpleSearcher":
-        results = searcher.search(selected_affils, conf_name, year)
-    else:
-        results = searcher.search(selected_affils, conf_name)
+    results = searcher.search(selected_affils, conf_name, year, exclude_papers, rtype="affil")
 
     metrics["Time"] = time.time() - start
 
@@ -118,16 +116,18 @@ def main():
 
     # import pdb;pdb.set_trace()
     selected_affils = db.select(fields="id", table="selected_affils")
+    year = ["2011", "2012", "2013", "2014"]
     for c in confs :
         # log.info("Running '%s' conf.\n" % c)
         print "Running on '%s' conf." % c
         ground_truth = calc_ground_truth_score(selected_affils, c)
+        exclude_papers = get_selected_docs(c, "2015")
 
         for s in searchers :
             print "Running %s." % s.name()
             rfile = get_results_file(c, s.name())
-            year = ["2011", "2012", "2013", "2014"] if s.name() == "SimpleSearcher" else None
-            get_search_metrics(selected_affils, ground_truth, c, year, s, results_file=rfile)
+            get_search_metrics(selected_affils, ground_truth, c, year, s,\
+                         exclude_papers=exclude_papers, results_file=rfile)
             del s
         print
 

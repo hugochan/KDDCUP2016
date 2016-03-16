@@ -156,7 +156,7 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
 #           graph.remove_node(node)
 
 
-def rank_nodes(graph, selected_affils, papers_relev=0.2,
+def rank_nodes(graph, papers_relev=0.2,
                                          authors_relev=0.2,
                                          # topics_relev=0.2,
                                          words_relev=0.2,

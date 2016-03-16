@@ -77,16 +77,11 @@ def simple_search(selected_affils, conf_name, year):
 
     # we only rank the selected affiliations
     if selected_affils:
-        selected_affil_scores = defaultdict()
-        for each in selected_affils:
-            try:
-                selected_affil_scores[each] = affil_scores[each]
-            except:
-                selected_affil_scores[each] = 0.0
-    else: # return all the affils
-        selected_affil_scores = affil_scores
+        selected_affil_scores = get_selected_nodes(affil_scores, selected_affils)
 
-    selected_affil_scores  = sorted(selected_affil_scores.items(), key=lambda d: d[1], reverse=True)
+    else: # sort and return all the affils
+        selected_affil_scores = sorted(affil_scores.items(), key=lambda d: d[1], reverse=True)
+
     return selected_affil_scores
 
 
@@ -102,7 +97,7 @@ class SimpleSearcher():
     def name(self):
         return "SimpleSearcher"
 
-    def search(self, selected_affils, conf_name, year):
+    def search(self, selected_affils, conf_name, year, rtype="affil"):
         rst = simple_search(selected_affils, conf_name, year)
         return rst
 
@@ -138,7 +133,7 @@ class Searcher:
         return self.graph
 
 
-    def search(self, selected_affils, conf_name, year, exclude=[], rtype="affil", force=False):
+    def search(self, selected_affils, conf_name, year, exclude_papers=[], rtype="affil", force=False):
         """
         Checks if the graph model already exists, otherwise creates one and
         runs the ranking on the nodes.
@@ -148,13 +143,13 @@ class Searcher:
                             year,
                             self.params['min_topic_lift'],
                             self.params['min_ngram_lift'],
-                            exclude, force, load=True, save=self.save)
+                            exclude_papers, force, load=True, save=self.save)
 
         # Store number of nodes for checking later
         self.nnodes = graph.number_of_nodes()
 
         # Rank nodes using subgraph
-        scores = rank_nodes(graph, selected_affils, return_type=rtype, **self.params)
+        scores = rank_nodes(graph, return_type=rtype, **self.params)
 
         # Adds the score to the nodes and writes to disk. A stupid cast
         # is required because write_gexf can't handle np.float64
@@ -164,10 +159,40 @@ class Searcher:
         # nx.write_gexf(graph, utils.get_graph_file_name(model_folder, query))
 
         # Returns the top values of the type of node of interest
-        results = get_top_nodes(graph, scores.items(), limit=limit, return_type=rtype)
+        results = get_top_nodes(graph, scores.items(), limit=selected_affils, return_type=rtype)
 
         # Add to class object for future access
         self.graph = graph
 
-        return [str(pub_id) for _nid, pub_id, _score in results]
+        return [(affil_id, _score) for _nid, affil_id, _score in results]
 
+
+def get_top_nodes(graph, scores, limit, return_type="affil"):
+    """
+    Helper method that takes the graph and the calculated scores and outputs a sorted rank
+    of the request type of node.
+    """
+
+    related_scores = dict([(graph.node[k]["entity_id"], v) for k, v in scores\
+                     if graph.node[k]["type"] == return_type])
+
+
+    ranking = get_selected_nodes(related_scores, limit)
+
+    return ranking
+
+
+def get_selected_nodes(ranking, selected_nodes):
+    """
+    Helper method that ranks the selected nodes given the ranking over all the nodes.
+    """
+
+    selected_ranking = defaultdict()
+    for each in selected_nodes:
+        try:
+            selected_ranking[each] = ranking[each]
+        except:
+            selected_ranking[each] = 0.0
+
+    selected_ranking  = sorted(selected_ranking.items(), key=lambda d: d[1], reverse=True)
+    return selected_ranking
