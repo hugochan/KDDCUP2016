@@ -5,9 +5,14 @@ Created on Mar 14, 2016
 '''
 
 from datasets.mag import get_selected_pubs
-from collections import defaultdict
 from ranking.kddcup_ranker import rank_nodes
+import kddcup_model
+import utils
+import config
 
+from collections import defaultdict
+import os
+import networkx as nx
 
 builder = None
 
@@ -28,7 +33,7 @@ def build_graph(conf_name, year, H, min_topic_lift, min_ngram_lift, exclude=[], 
     if force or (not os.path.exists(graph_file)):
 
         if not builder:
-            builder = model.ModelBuilder()
+            builder = kddcup_model.ModelBuilder()
 
         # Builds the graph file
         graph = builder.build(conf_name, year, H, min_topic_lift, min_ngram_lift, exclude)
@@ -139,8 +144,8 @@ class Searcher:
         runs the ranking on the nodes.
         """
         graph = build_graph(conf_name,
-                            self.params['H'],
                             year,
+                            self.params['H'],
                             self.params['min_topic_lift'],
                             self.params['min_ngram_lift'],
                             exclude_papers, force, load=True, save=self.save)
@@ -164,7 +169,7 @@ class Searcher:
         # Add to class object for future access
         self.graph = graph
 
-        return [(affil_id, _score) for _nid, affil_id, _score in results]
+        return results
 
 
 def get_top_nodes(graph, scores, limit, return_type="affil"):

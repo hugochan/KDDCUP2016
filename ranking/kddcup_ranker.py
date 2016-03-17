@@ -183,31 +183,38 @@ def rank_nodes(graph, papers_relev=0.2,
 
     # Layer relevance parameters are exponentiate to increase sensitivity and normalized to sum to 1
 #   rho = np.exp([papers_relev, authors_relev, topics_relev, words_relev])
-    rho = np.asarray([papers_relev, authors_relev, words_relev, venues_relev, affils_relev])
-    rho_papers, rho_authors, rho_words, rho_venues, rho_affils = rho/rho.sum()
+    rho = np.asarray([papers_relev, authors_relev, words_relev, affils_relev])
+    # rho = np.asarray([papers_relev, authors_relev, words_relev, venues_relev, affils_relev])
+    rho_papers, rho_authors, rho_words, rho_affils = rho/rho.sum()
+    # rho_papers, rho_authors, rho_words, rho_venues, rho_affils = rho/rho.sum()
 
-    log.debug("Transitions paper -> x: paper=%.3f, author=%.3f, words=%.3f, venues=%.3f" %
-                                        (rho_papers, rho_authors, rho_words, rho_venues))
+    # log.debug("Transitions paper -> x: paper=%.3f, author=%.3f, words=%.3f, venues=%.3f" %
+    #                                     (rho_papers, rho_authors, rho_words, rho_venues))
 
     # Transition probabilities between layers. The rows and columns correspond to
     # the papers, authors, topics and words layers. So for example, the value at
     # (i,j) is the probability of the random walker to go from layer i to layer j.
-    rho = np.array([[rho_papers,     rho_authors,    rho_words,      rho_venues,    0],
-                [rho_authors,  1.0-rho_authors-rho_affils,    0,     0,    rho_affils],
-                [rho_words,                  0,   1.0-rho_words,              0,    0],
-                [rho_venues,                0,               0,  1.0-rho_venues,    0],
+    rho = np.array([[rho_papers,     rho_authors,    rho_words,          0],
+                [rho_authors,  1.0-rho_authors-rho_affils,    0,         rho_affils],
+                [rho_words,                  0,   1.0-rho_words,              0],
                 [         0,       rho_affils,          0,     0,      1.0-rho_affils]])
+    # rho = np.array([[rho_papers,     rho_authors,    rho_words,      rho_venues,    0],
+    #             [rho_authors,  1.0-rho_authors-rho_affils,    0,     0,    rho_affils],
+    #             [rho_words,                  0,   1.0-rho_words,              0,    0],
+    #             [rho_venues,                0,               0,  1.0-rho_venues,    0],
+    #             [         0,       rho_affils,          0,     0,      1.0-rho_affils]])
 
     # Maps the layers name to the dimensions
-    layers = {"paper":0, "author":1, "keyword":3, "venue":4, "affil":5}
+    # layers = {"paper":0, "author":1, "keyword":2, "venue":3, "affil":4}
+    layers = {"paper":0, "author":1, "keyword":2, "affil":3}
 
     # Alias vector to map nodes into their types (paper, author, etc.) already
     # as their numeric representation (paper=0, author=1, etc.) as listed above.
     node_types = {u: layers[graph.node[u]["type"]] for u in graph.nodes()}
 
     # Quick alias method to check if the node is paper or affil
-    is_paper = lambda n: (node_types[n]==0)
-    is_affil = lambda n: (node_types[n]==5)
+    is_paper = lambda n: (node_types[n] == layers["paper"])
+    is_affil = lambda n: (node_types[n] == layers["affil"])
 
 #   print graph.number_of_nodes(),
 
@@ -219,20 +226,20 @@ def rank_nodes(graph, papers_relev=0.2,
     # Assemble our personalization vector according to similarity to the query provided.
     # Only paper nodes get teleported to, so other layers get 0 as factors.
     # Get year median to replace missing values.
-    old_year = 1950
-    current_year = 2016
-    npapers = 0
-    years = []
-    for u in graph.nodes() :
-        if is_paper(u) :
-            npapers += 1
+    # old_year = 1950
+    # current_year = 2016
+    # npapers = 0
+    # years = []
+    # for u in graph.nodes() :
+    #     if is_paper(u) :
+    #         npapers += 1
 
-            if (graph.node[u]["year"] > 0) :
-                years.append(graph.node[u]["year"])
+    #         if (graph.node[u]["year"] > 0) :
+    #             years.append(graph.node[u]["year"])
 
-    year_median = np.median(years)
+    # year_median = np.median(years)
 
-    log.debug("Using year=%d (median) for missing values." % int(year_median))
+    # log.debug("Using year=%d (median) for missing values." % int(year_median))
 
 
     # Normalize weights within each kind of layer transition, e.g., normalize papers to
@@ -245,14 +252,14 @@ def rank_nodes(graph, papers_relev=0.2,
 
         # Also apply the age attenuator to control relevance of old and highly cited papers
             if is_paper(v) and is_paper(u):
-                year = graph.node[v]["year"]
-                if year == 0:
-                    year = year_median
-                else:
-                    year = min(max(year, old_year), current_year)
+                # year = graph.node[v]["year"]
+                # if year == 0:
+                #     year = year_median
+                # else:
+                #     year = min(max(year, old_year), current_year)
 
                 weight = 1.0
-                weight *= np.exp(-(age_relev)*(current_year-year))
+                # weight *= np.exp(-(age_relev)*(current_year-year))
 
                 atts['weight'] = weight
 #               print weight
@@ -270,7 +277,6 @@ def rank_nodes(graph, papers_relev=0.2,
 #           if (weights[to_layer]==0) :
 #               print
             atts['weight'] *= rho[from_layer][to_layer]/weights[to_layer]
-
 
     # Create personalization dict. The probability to leap to a publication node
     # is proportional to the similarity of that publication's text to the query.

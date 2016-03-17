@@ -14,7 +14,7 @@ import cPickle
 # from baselines.scholar import match_by_title
 from evaluation.metrics import ndcg2
 from datasets.mag import get_selected_docs
-from ranking.kddcup_searchers import simple_search, SimpleSearcher
+from ranking.kddcup_searchers import simple_search, SimpleSearcher, Searcher
 
 
 # log.basicConfig(format='%(asctime)s [%(levelname)s] : %(message)s', level=log.INFO)
@@ -74,7 +74,10 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
     start = time.time()
 
-    results = searcher.search(selected_affils, conf_name, year, exclude_papers, rtype="affil")
+    if searcher.name() == "SimpleSearcher":
+        results = searcher.search(selected_affils, conf_name, year, rtype="affil")
+    else:
+        results = searcher.search(selected_affils, conf_name, year, exclude_papers, rtype="affil")
 
     metrics["Time"] = time.time() - start
 
@@ -98,19 +101,20 @@ def main():
 
     confs = [
                 "SIGIR", # Phase 1
-                "SIGMOD",
-                "SIGCOMM",
+                # "SIGMOD",
+                # "SIGCOMM",
 
-                "KDD", # Phase 2
-                "ICML",
+                # "KDD", # Phase 2
+                # "ICML",
 
-                "FSE", # Phase 3
-                "MobiCom",
-                "MM",
+                # "FSE", # Phase 3
+                # "MobiCom",
+                # "MM",
             ]
 
     searchers = [
-                    SimpleSearcher(),
+                    # SimpleSearcher(),
+                    Searcher(**config.PARAMS),
 
                 ]
 
@@ -125,6 +129,18 @@ def main():
 
         for s in searchers :
             print "Running %s." % s.name()
+
+            if s.name() == "MultiLayered":
+                s.set_params(**{
+                              'H': 1,
+                              # 'age_relev': 0.01, # 0.01
+                              'papers_relev': .25,
+                              'authors_relev': .25,
+                              'words_relev': .25,
+                              # 'venues_relev' : .2,
+                              'affils_relev': .25,
+                              'alpha': 0.3}) # 0.1
+
             rfile = get_results_file(c, s.name())
             get_search_metrics(selected_affils, ground_truth, c, year, s,\
                          exclude_papers=exclude_papers, results_file=rfile)

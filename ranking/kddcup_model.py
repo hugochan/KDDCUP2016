@@ -37,15 +37,13 @@ def get_all_edges(papers):
   if hasattr(papers, '__iter__'):
     if len(papers) == 0:
       return []
-    elif len(papers) == 1:
-      paper_str = "(%s)" % papers[0]
     else:
-      paper_str = str(tuple(paper))
-    else:
+      paper_str = ",".join(["'%s'" % paper_id for paper_id in papers])
+  else:
       raise TypeError("Parameter 'papers' is of unsupported type. Iterable needed.")
 
   rows = db.select(fields=["paper_id", "paper_ref_id"], table="paper_refs",
-            where="paper_id IN %s OR paper_ref_id IN %s"%(paper_str, paper_str))
+            where="paper_id IN (%s) OR paper_ref_id IN (%s)"%(paper_str, paper_str))
 
   return rows
 
@@ -107,6 +105,11 @@ def normalize_edges(edges):
 
 #   dem = np.sqrt(np.square(d1.values()).sum()) * np.sqrt(np.square(d2.values()).sum())
 #   return sim / dem
+
+
+def sorted_tuple(a, b):
+  """ Simple pair sorting to avoid repetitions when inserting into set or dict. """
+  return (a, b) if a < b else (b, a)
 
 
 def get_rules_by_lift(transactions, min_lift=1.0):
@@ -283,7 +286,7 @@ class ModelBuilder:
     return nodes, weighted_edges
 
 
-def get_paper_based_coauthorships(self, papers, weighted=True):
+  def get_paper_based_coauthorships(self, papers, weighted=True):
     """
     Return all the collaborationships between the given papers. Edges to authors not
     provided (according to given papers) are not included.
@@ -292,15 +295,13 @@ def get_paper_based_coauthorships(self, papers, weighted=True):
     if hasattr(papers, '__iter__'):
       if len(papers) == 0:
         return []
-      elif len(papers) == 1:
-        paper_str = "(%s)" % papers[0]
       else:
-        paper_str = str(tuple(paper))
+        paper_str = ",".join(["'%s'" % paper_id for paper_id in papers])
     else:
       raise TypeError("Parameter 'papers' is of unsupported type. Iterable needed.")
 
 
-    rows = db.select(["paper_id", "author_id"], "paper_author_affils", where="paper_id IN %s"%paper_str)
+    rows = db.select(["paper_id", "author_id"], "paper_author_affils", where="paper_id IN (%s)"%paper_str)
 
     rows = set(rows) # Removing duplicate records
     author_papers = defaultdict()
@@ -314,15 +315,13 @@ def get_paper_based_coauthorships(self, papers, weighted=True):
     authors = author_papers.keys()
     for i in xrange(len(authors) - 1):
       for j in xrange(i + 1, len(authors)):
-        npapers = len(author_papers[authors[i]] & author_papers[authors[j]])
+        npapers = float(len(author_papers[authors[i]] & author_papers[authors[j]]))
 
-        # Apply log transformation to smooth values and avoid outliers
-        if weighted:
-          npapers = 1.0 + np.log(npapers) if npapers > 0 else npapers
-        else:
-          npapers = 1.0 if npapers > 0 else npapers
+        if npapers > 0:
+          # Apply log transformation to smooth values and avoid outliers
+          npapers = 1.0 + np.log(npapers) if weighted else 1.0
 
-        coauthorships.append((authors[i], authors[j], npapers))
+          coauthorships.append((authors[i], authors[j], npapers))
 
     return authors, rows, coauthorships
 
@@ -781,7 +780,7 @@ def get_paper_based_coauthorships(self, papers, weighted=True):
             authors, coauth_edges, auth_edges,
             # topics, topic_topic_edges, paper_topic_edges,
             ngrams, ngram_ngram_edges, paper_ngram_edges,
-            venues, pub_venue_edges,
+            # venues, pub_venue_edges,
             affils, author_affil_edges):
     """
     Assembles the layers as an unified graph. Each node as an unique id, its type (paper,
@@ -813,8 +812,9 @@ def get_paper_based_coauthorships(self, papers, weighted=True):
 
       graph.add_node(next_id,
                type="paper",
-               entity_id=pub,
-               year=self.pub_years[pub])
+               entity_id=pub
+               # year=self.pub_years[pub]
+               )
 
       pubs_ids[pub] = next_id
       next_id += 1
@@ -838,9 +838,9 @@ def get_paper_based_coauthorships(self, papers, weighted=True):
       graph.add_edge(authors_ids[author2], authors_ids[author1], weight=weight)
 
     # Add authorship edges on both directions (undirected)
-    for paper, author, weight in auth_edges:
-      graph.add_edge(pubs_ids[paper], authors_ids[author], weight=weight)
-      graph.add_edge(authors_ids[author], pubs_ids[paper], weight=weight)
+    for paper, author in auth_edges:
+      graph.add_edge(pubs_ids[paper], authors_ids[author], weight=1.0)
+      graph.add_edge(authors_ids[author], pubs_ids[paper], weight=1.0)
 
 
     ####################################
@@ -865,7 +865,7 @@ def get_paper_based_coauthorships(self, papers, weighted=True):
     ####################################
     # Add ngram nodes
     for ngram in ngrams:
-      graph.add_node(next_id, type="ngram", entity_id=ngram)
+      graph.add_node(next_id, type="keyword", entity_id=ngram)
 
       words_ids[ngram] = next_id
       next_id += 1
@@ -882,15 +882,15 @@ def get_paper_based_coauthorships(self, papers, weighted=True):
 
     ####################################
     # Add venues to the graph
-    for venue in venues:
-      graph.add_node(next_id, type="venue", entity_id=venue)
+    # for venue in venues:
+    #   graph.add_node(next_id, type="venue", entity_id=venue)
 
-      venues_ids[venue] = next_id
-      next_id += 1
+    #   venues_ids[venue] = next_id
+    #   next_id += 1
 
-    for pub, venue, weight in pub_venue_edges:
-      graph.add_edge(pubs_ids[pub], venues_ids[venue], weight=weight)
-      graph.add_edge(venues_ids[venue], pubs_ids[pub], weight=weight)
+    # for pub, venue, weight in pub_venue_edges:
+    #   graph.add_edge(pubs_ids[pub], venues_ids[venue], weight=weight)
+    #   graph.add_edge(venues_ids[venue], pubs_ids[pub], weight=weight)
 
 
   # Add affils to the graph
@@ -948,17 +948,15 @@ def get_paper_based_coauthorships(self, papers, weighted=True):
     if hasattr(papers, '__iter__'):
       if len(papers) == 0:
         return [], []
-      elif len(papers) == 1:
-        paper_str = "(%s)" % papers[0]
       else:
-        paper_str = str(tuple(papers))
+        paper_str = ",".join(["'%s'" % paper_id for paper_id in papers])
     else:
       raise TypeError("Parameter 'papers' is of unsupported type. Iterable needed.")
 
     venues = set()
     pub_venue_edges = list()
     rows = db.select(fields=["id", "jornal_id", "conf_id"], table="papers", \
-            where="id IN %s"%paper_str)
+            where="id IN (%s)"%paper_str)
     for pub, jornal_id, conf_id in rows:
       if jornal_id:
         venues.add(jornal_id)
@@ -970,7 +968,7 @@ def get_paper_based_coauthorships(self, papers, weighted=True):
     return list(venues), pub_venue_edges
 
 
-def get_affils_layer(self, authors):
+  def get_affils_layer(self, authors):
     """
     Returns the affils' ids and edges from authors to affiliations according
     to authors.
@@ -978,16 +976,14 @@ def get_affils_layer(self, authors):
     if hasattr(authors, '__iter__'):
       if len(authors) == 0:
         return [], []
-      elif len(authors) == 1:
-        author_str = "(%s)" % authors[0]
       else:
-        author_str = str(tuple(authors))
+        author_str = ",".join(["'%s'" % author_id for author_id in authors])
     else:
       raise TypeError("Parameter 'authors' is of unsupported type. Iterable needed.")
 
     affils = set()
     author_affil_edges = set()
-    rows = db.select(["author_id", "affil_id"], "paper_author_affils", where="author_id IN %s"%author_str)
+    rows = db.select(["author_id", "affil_id"], "paper_author_affils", where="author_id IN (%s)"%author_str)
     for author, affil in rows:
       affils.add(affil)
       author_affil_edges.add((author, affil, 1.0))
@@ -1021,18 +1017,18 @@ def get_affils_layer(self, authors):
       words, word_word_edges, pub_word_edges = self.get_keywords_layer_from_db(pubs, min_ngram_lift)
     log.debug("%d words and %d pub-word edges." % (len(words), len(pub_word_edges)))
 
-    venues, pub_venue_edges = self.get_venues_layer(pubs)
-    log.debug("%d venues and %d pub-venue edges." % (len(venues), len(pub_venue_edges)))
+    # venues, pub_venue_edges = self.get_venues_layer(pubs)
+    # log.debug("%d venues and %d pub-venue edges." % (len(venues), len(pub_venue_edges)))
 
     affils, author_affil_edges = self.get_affils_layer(authors)
-    log.debug("%d affiliations and %d pub-affil edges." % (len(affils), len(pub_affil_edges)))
+    log.debug("%d affiliations and %d pub-affil edges." % (len(affils), len(author_affil_edges)))
 
     graph = self.assemble_layers(pubs, citation_edges,
                    authors, coauth_edges, auth_edges,
                    # None, None, None,
                    #                                                        topics, topic_topic_edges, pub_topic_edges,
                    words, word_word_edges, pub_word_edges,
-                   venues, pub_venue_edges,
+                   # venues, pub_venue_edges,
                    affils, author_affil_edges)
 
     # Writes the contexts of each edge into a file to be used efficiently
