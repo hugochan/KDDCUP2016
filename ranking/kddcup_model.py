@@ -996,9 +996,19 @@ class ModelBuilder:
     univ_academy_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(University|Academy)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
     institute_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(Institute)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
     college_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(College)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
+
+    univ_academy_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(University|Academy)[^,;:.\\d]*$'
+    institute_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(Institute)[^,;:.\\d]*$'
+    college_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(College)[^,;:.\\d]*$'
+
+
     univ_academy_prog = re.compile(univ_academy_pattern)
     institute_prog = re.compile(institute_pattern)
     college_prog = re.compile(college_pattern)
+
+    univ_academy_prog2 = re.compile(univ_academy_pattern2)
+    institute_prog2 = re.compile(institute_pattern2)
+    college_prog2 = re.compile(college_pattern2)
 
     for author_id, affil_id in rows:
       # Since coverage of affils in MAG dataset is quite low,
@@ -1073,7 +1083,7 @@ class ModelBuilder:
 
                 if not match_flag:
                   # 2) then, check full name
-                  normal_affil_name = affil_names[0].replace('univ.', 'university')
+                  normal_affil_name = affil_names[0].title().replace('Univ.', 'University').replace('Umversity', 'University') # low-prob case
 
                   # try matching university and academy
                   rst = univ_academy_prog.search(normal_affil_name)
@@ -1082,9 +1092,15 @@ class ModelBuilder:
                     if not rst:
                       rst = college_prog.search(normal_affil_name)
                       if not rst:
-                        print 'no name'
-                        import pdb;pdb.set_trace()
-                        continue
+                        rst = univ_academy_prog2.search(normal_affil_name)
+                        if not rst:
+                          rst = institute_prog2.search(normal_affil_name)
+                          if not rst:
+                            rst = college_prog2.search(normal_affil_name)
+                            if not rst:
+                              print affil_names[0]
+                              # import pdb;pdb.set_trace()
+                              continue
 
                   name_of_affil = rst.group(0).replace('-', '').replace('The', '').strip()
                   match_flag = True
