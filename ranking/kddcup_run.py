@@ -12,7 +12,7 @@ import config
 from collections import defaultdict
 from mymysql.mymysql import MyMySQL
 from datasets.mag import get_selected_pubs
-from ranking.kddcup_searchers import SimpleSearcher
+from ranking.kddcup_searchers import SimpleSearcher, Searcher
 from evaluation.kddcup_expt import get_results_file, save_results
 
 db = MyMySQL(db=config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
@@ -24,7 +24,7 @@ def rank_affils(selected_affils, conf_name, year, searcher, show=True, results_f
     start = time.time()
 
     if searcher.name() == "SimpleSearcher":
-        results = searcher.search(selected_affils, conf_name, year)
+        results = searcher.search(selected_affils, conf_name, year, rtype="affil")
         # normalize ranking score
         ids, scores = zip(*results)
         scores = np.array(scores)
@@ -33,7 +33,7 @@ def rank_affils(selected_affils, conf_name, year, searcher, show=True, results_f
             scores = scores / _max
         results = zip(ids, scores.tolist())
     else:
-        results = searcher.search(selected_affils, conf_name)
+        results = searcher.search(selected_affils, conf_name, year, force=True, rtype="affil")
 
     print "Runtime: %s" % (time.time() - start)
 
@@ -70,6 +70,7 @@ def merge_confs_in_phase(phase, method_name):
     if not os.path.exists(folder) :
         os.makedirs(folder)
 
+    print "Merge result files ..."
     try:
         with open("%s/results.tsv"%folder, 'w+') as outfile:
             for fname in rfile_list:
@@ -85,6 +86,7 @@ def merge_confs_in_phase(phase, method_name):
         print e
 
     outfile.close()
+    print "Generate final submission file: %s/results.tsv"%folder
 
 
 def main():
@@ -94,28 +96,42 @@ def main():
                 "SIGMOD",
                 "SIGCOMM",
 
-                "KDD", # Phase 2
-                "ICML",
+                # "KDD", # Phase 2
+                # "ICML",
 
-                "FSE", # Phase 3
-                "MobiCom",
-                "MM",
+                # "FSE", # Phase 3
+                # "MobiCom",
+                # "MM",
             ]
 
     searchers = [
-                    SimpleSearcher(),
+                    # SimpleSearcher(),
+                    Searcher(**config.PARAMS),
 
                 ]
 
     # import pdb;pdb.set_trace()
     selected_affils = db.select(fields="id", table="selected_affils")
+    year = ["2011", "2012", "2013", "2014", "2015"]
+
     for c in confs:
         print "Running on '%s' conf." % c
 
         for s in searchers:
             print "Running %s." % s.name()
+
+            if s.name() == "MultiLayered":
+                s.set_params(**{
+                              'H': 1,
+                              # 'age_relev': 0.01, # 0.01
+                              'papers_relev': .2,
+                              'authors_relev': .3,
+                              'words_relev': .2,
+                              # 'venues_relev' : .2,
+                              'affils_relev': .3,
+                              'alpha': 0.05}) # 0.1
+
             rfile = get_results_file(c, "results_%s"%s.name())
-            year = ["2011", "2012", "2013", "2014", "2015"] if s.name() == "SimpleSearcher" else None
             rank_affils(selected_affils, c, year, s, results_file=rfile)
             del s
         print

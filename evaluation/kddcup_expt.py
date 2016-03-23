@@ -30,11 +30,6 @@ def calc_ground_truth_score(selected_affils, conf_name, year="2015"): # {paper_i
 
     return ground_truth
 
-def calc_ndcg(ground_truth, pred):
-    actual, relevs = zip(*ground_truth)
-    metric = ndcg2(actual, pred, relevs, k=len(actual))
-
-    return metric
 
 def get_results_file(conf_name, method_name) :
     folder = "%sresults/%s" % (config.DATA, conf_name)
@@ -77,14 +72,14 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     if searcher.name() == "SimpleSearcher":
         results = searcher.search(selected_affils, conf_name, year, rtype="affil")
     else:
-        results = searcher.search(selected_affils, conf_name, year, exclude_papers, rtype="affil")
+        results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
 
     metrics["Time"] = time.time() - start
 
     actual, relevs = zip(*ground_truth)
     pred = zip(*results)[0]
 
-    metrics["NDCG"] = ndcg2(actual, pred, relevs, k=len(actual))
+    metrics["NDCG"] = ndcg2(actual, pred, relevs, k=20)
 
 
     if results_file:
@@ -101,15 +96,15 @@ def main():
 
     confs = [
                 "SIGIR", # Phase 1
-                # "SIGMOD",
-                # "SIGCOMM",
+                "SIGMOD",
+                "SIGCOMM",
 
-                # "KDD", # Phase 2
-                # "ICML",
+                "KDD", # Phase 2
+                "ICML",
 
-                # "FSE", # Phase 3
-                # "MobiCom",
-                # "MM",
+                "FSE", # Phase 3
+                "MobiCom",
+                "MM",
             ]
 
     searchers = [
@@ -124,7 +119,12 @@ def main():
     for c in confs :
         # log.info("Running '%s' conf.\n" % c)
         print "Running on '%s' conf." % c
-        ground_truth = calc_ground_truth_score(selected_affils, c)
+        ground_truth = calc_ground_truth_score(selected_affils, c) # low coverage
+        # count = 0
+        # for k, v in ground_truth:
+        #     if v == 0:
+        #         count += 1
+        # print "%s/%s"%(count, len(ground_truth))
         exclude_papers = get_selected_docs(c, "2015")
 
         for s in searchers :
@@ -134,12 +134,12 @@ def main():
                 s.set_params(**{
                               'H': 1,
                               # 'age_relev': 0.01, # 0.01
-                              'papers_relev': .25,
-                              'authors_relev': .25,
-                              'words_relev': .25,
+                              'papers_relev': .2,
+                              'authors_relev': .3,
+                              'words_relev': .2,
                               # 'venues_relev' : .2,
-                              'affils_relev': .25,
-                              'alpha': 0.3}) # 0.1
+                              'affils_relev': .3,
+                              'alpha': 0.2}) # 0.1
 
             rfile = get_results_file(c, s.name())
             get_search_metrics(selected_affils, ground_truth, c, year, s,\

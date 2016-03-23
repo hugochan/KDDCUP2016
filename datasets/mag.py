@@ -25,7 +25,7 @@ def import_selected_affils(file_path, table_name='selected_affils'):
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ')
+                line = line.strip('\r\n').strip(' ')
                 if line == '':
                     continue
 
@@ -74,7 +74,7 @@ def import_selected_papers(file_path, table_name='selected_papers'):
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ')
+                line = line.strip('\r\n').strip(' ')
                 if line == '':
                     continue
 
@@ -133,7 +133,7 @@ def import_affils(file_path, table_name='affils'):
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ')
+                line = line.strip('\r\n').strip(' ')
                 if line == '':
                     continue
 
@@ -175,7 +175,7 @@ def import_confs(file_path, table_name='confs'):
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ')
+                line = line.strip('\r\n').strip(' ')
                 if line == '':
                     continue
 
@@ -233,7 +233,7 @@ def import_conf_insts(file_path, table_name='conf_insts'):
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ') # there are missing values in this dataset, keep \t sign for locating
+                line = line.strip('\r\n').strip(' ') # there are missing values in this dataset, keep \t sign for locating
                 if line == '':
                     continue
 
@@ -277,7 +277,7 @@ def import_journals(file_path, table_name='journals'):
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ')
+                line = line.strip('\r\n').strip(' ')
                 if line == '':
                     continue
 
@@ -320,7 +320,7 @@ def import_authors(file_path, table_name='authors'):
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ')
+                line = line.strip('\r\n').strip(' ')
                 if line == '':
                     continue
 
@@ -367,7 +367,7 @@ def import_paper_keywords(file_path, table_name='paper_keywords'):
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ')
+                line = line.strip('\r\n').strip(' ')
                 if line == '':
                     continue
 
@@ -414,7 +414,7 @@ def import_paper_refs(file_path, table_name='paper_refs'):
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ')
+                line = line.strip('\r\n').strip(' ')
                 if line == '':
                     continue
 
@@ -465,16 +465,17 @@ def import_papers(file_path, table_name='papers'):
     db.create_table(table_name, table_description)
     fields = ['id', 'title', 'normal_title', 'year', 'date', 'DOI', 'venue_name',
             'normal_venue_name', 'jornal_id', 'conf_id', 'paper_rank']
+    nfields = len(fields)
 
     npapers = 0
     papers = []
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ')
+                line = line.strip('\r\n').strip(' ')
                 if line == '':
                     continue
-
+                # 126909021 records
                 # Paper ID
                 # Original paper title
                 # Normalized paper title
@@ -488,6 +489,10 @@ def import_papers(file_path, table_name='papers'):
                 # Paper rank
                 try :
                     row = line.split('\t')
+                    if len(row) != nfields:
+                        print "Drop an invalid record."
+                        continue
+
                     papers.append(tuple(row))
                     npapers += 1
 
@@ -534,7 +539,7 @@ def import_paper_author_affils(file_path, table_name='paper_author_affils'):
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ')
+                line = line.strip('\r\n').strip(' ')
                 if line == '':
                     continue
 
@@ -552,7 +557,7 @@ def import_paper_author_affils(file_path, table_name='paper_author_affils'):
                     paper_author_affils.append(tuple(row))
                     npaper_author_affils += 1
 
-                    if len(paper_author_affils) == 100000:
+                    if len(paper_author_affils) == 500000:
                         db.insert(into=table_name, fields=fields, values=paper_author_affils, ignore=True)
                         paper_author_affils[:] = []   # Empty the list
                         print "%d processed." % npaper_author_affils
@@ -585,7 +590,7 @@ def import_paper_urls(file_path, table_name='paper_urls'):
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ')
+                line = line.strip('\r\n').strip(' ')
                 if line == '':
                     continue
 
@@ -628,7 +633,7 @@ def import_field_of_study(file_path, table_name='field_of_study'):
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ')
+                line = line.strip('\r\n').strip(' ')
                 if line == '':
                     continue
 
@@ -678,7 +683,7 @@ def import_fields_of_study_hierarchy(file_path, table_name='fields_of_study_hier
     try:
         with open(file_path, 'r') as f:
             for line in f:
-                line = line.strip(' ')
+                line = line.strip('\r\n').strip(' ')
                 if line == '':
                     continue
 
@@ -824,5 +829,5 @@ def get_selected_pubs(conf_name=None, year=None):
 
 if __name__ == '__main__':
     # import_papers(config.DATA + 'Papers/Papers.txt')
-    import_paper_author_affils('/Volumes/Mixed-Data/data/MAG/PaperAuthorAffiliations/PaperAuthorAffiliations.txt')
+    import_authors('/Volumes/Mixed-Data/data/MAG/Authors/Authors.txt')
     # pass

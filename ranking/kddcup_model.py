@@ -10,6 +10,7 @@ import networkx as nx
 from mymysql import MyMySQL
 from collections import defaultdict
 from exceptions import TypeError
+import re
 
 # from pylucene import Index
 import itertools
@@ -19,7 +20,7 @@ import words
 import config
 import utils
 from datasets.mag import get_selected_docs
-
+from datasets.affil_names import *
 
 
 
@@ -27,7 +28,6 @@ from datasets.mag import get_selected_docs
 db = MyMySQL(db=config.DB_NAME,
              user=config.DB_USER,
              passwd=config.DB_PASSWD)
-
 
 
 def get_all_edges(papers):
@@ -981,12 +981,152 @@ class ModelBuilder:
     else:
       raise TypeError("Parameter 'authors' is of unsupported type. Iterable needed.")
 
+    affil_stopwords = ['university', 'department', 'of', 'and', 'college', 'institute']
+
     affils = set()
     author_affil_edges = set()
     rows = db.select(["author_id", "affil_id"], "paper_author_affils", where="author_id IN (%s)"%author_str)
-    for author, affil in rows:
-      affils.add(affil)
-      author_affil_edges.add((author, affil, 1.0))
+
+    count = 0
+    author_appear_count = 0
+    match_affil_count = 0
+    fix_count = 0
+    tmp = set()
+    tmp_authors = set()
+    univ_academy_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(University|Academy)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
+    institute_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(Institute)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
+    college_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(College)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
+    univ_academy_prog = re.compile(univ_academy_pattern)
+    institute_prog = re.compile(institute_pattern)
+    college_prog = re.compile(college_pattern)
+
+    for author_id, affil_id in rows:
+      # Since coverage of affils in MAG dataset is quite low,
+      # we use data from CSX dataset as a complement.
+      if affil_id == '':
+        try:
+          if author_id in tmp_authors:
+            continue
+
+          count += 1
+          tmp_authors.add(author_id)
+          # import pdb;pdb.set_trace()
+          author_name = db.select("name", "authors", where="id='%s'"%author_id, limit=1)[0].strip('\r\n').strip()
+          affil_names = db.select("affil", "csx_authors", where="name='%s'"%author_name)
+
+          if affil_names:
+            # for each in set(affil_names):
+            # print affil_names[0]
+            # print '\r\n'
+            if affil_names[0]: # not None or empty string
+              author_appear_count += 1
+
+              affil_tokens = affil_names[0].lower().replace(",", " ").replace(";", " ").replace(".", " ").replace("-", " ").split()
+
+              match_flag = False
+              match_affil_ids = set()
+
+              # import pdb;pdb.set_trace()
+              # check if it's a company
+              for com in affil_companies:
+                if isinstance(com, str):
+                  if com in affil_tokens:
+                    name_of_affil = com
+                    match_flag = True
+                    break
+                else:
+                  flag = True
+                  for each in com:
+                    if not each in affil_tokens:
+                      flag = False
+                      break
+                  if flag:
+                    name_of_affil = ' '.join(com)
+                    match_flag = True
+                    break
+
+              if match_flag: # match a company
+                # print 'company'
+                match_affil_count += 1
+                affil_ids = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil)
+                if affil_ids:
+                  # print affil_ids[0]
+                  # print name_of_affil # we only keep one and ignore sub-affils
+                  # print
+                  fix_count += 1
+                  match_affil_ids.add(affil_ids[0])
+              else:
+                # check if it's an academic institute
+
+                # 1) first, check abbr.
+                for abbr, univ in affil_univs.iteritems():
+                  abbr_l = abbr.split()
+                  flag = True
+                  for each in abbr_l:
+                    if not each in affil_tokens:
+                      flag = False
+                      break
+                  if flag:
+                    name_of_affil = univ
+                    match_flag = True
+                    break
+
+                if not match_flag:
+                  # 2) then, check full name
+                  normal_affil_name = affil_names[0].replace('univ.', 'university')
+
+                  # try matching university and academy
+                  rst = univ_academy_prog.search(normal_affil_name)
+                  if not rst:
+                    rst = institute_prog.search(normal_affil_name)
+                    if not rst:
+                      rst = college_prog.search(normal_affil_name)
+                      if not rst:
+                        print 'no name'
+                        import pdb;pdb.set_trace()
+                        continue
+
+                  name_of_affil = rst.group(0).replace('-', '').replace('The', '').strip()
+                  match_flag = True
+
+                if match_flag:
+                  # print 'univ.'
+                  match_affil_count += 1
+                  affil_ids = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil)
+                  if affil_ids:
+                    # print affil_ids[0]
+                    # print name_of_affil # we only keep one and ignore sub-affils
+                    # print
+
+                    fix_count += 1
+                    match_affil_ids.add(affil_ids[0])
+                  else:
+                    # print 'yes name, no id'
+                    # import pdb;pdb.set_trace()
+                    pass
+                else:
+                  # print 'no name'
+                  # import pdb;pdb.set_trace()
+                  pass
+
+              if match_affil_ids:
+                affils.update(match_affil_ids)
+                for each in match_affil_ids:
+                  author_affil_edges.add((author_id, each, 1.0))
+          else:
+            # import pdb;pdb.set_trace()
+            pass
+        except Exception, e:
+          print e
+          continue
+
+      else:
+        affils.add(affil_id)
+        author_affil_edges.add((author_id, affil_id, 1.0))
+    # print "%s/%s"%(count, len(rows))
+    print "authors appear in csx/count: %s/%s"%(author_appear_count, count)
+    print "authors matching affil names/authors appear in csx: %s/%s"%(match_affil_count, author_appear_count)
+    print "authors matching affil ids/authors matching affil names: %s/%s"%(fix_count, match_affil_count)
     return list(affils), list(author_affil_edges)
 
 
@@ -1038,6 +1178,7 @@ class ModelBuilder:
     # Writes the gexf
     #       write_graph(graph, model_file)
     return graph
+
 
 
 if __name__ == '__main__':
