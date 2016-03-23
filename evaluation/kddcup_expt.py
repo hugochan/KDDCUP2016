@@ -134,11 +134,11 @@ def main():
                 s.set_params(**{
                               'H': 1,
                               # 'age_relev': 0.01, # 0.01
-                              'papers_relev': .4,
-                              'authors_relev': .6,
-                              # 'words_relev': .2,
+                              'papers_relev': .3,
+                              'authors_relev': .4,
+                              'words_relev': .3,
                               # 'venues_relev' : .2,
-                              'affils_relev': .55,
+                              'affils_relev': .6,
                               'alpha': 0.2}) # 0.1
 
             rfile = get_results_file(c, s.name())
