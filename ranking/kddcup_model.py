@@ -779,7 +779,7 @@ class ModelBuilder:
   def assemble_layers(self, pubs, citation_edges,
             authors, coauth_edges, auth_edges,
             # topics, topic_topic_edges, paper_topic_edges,
-            ngrams, ngram_ngram_edges, paper_ngram_edges,
+            # ngrams, ngram_ngram_edges, paper_ngram_edges,
             # venues, pub_venue_edges,
             affils, author_affil_edges):
     """
@@ -863,22 +863,22 @@ class ModelBuilder:
     #           graph.add_edge(topics_ids[topic], pubs_ids[paper], weight=weight)
 
     ####################################
-    # Add ngram nodes
-    for ngram in ngrams:
-      graph.add_node(next_id, type="keyword", entity_id=ngram)
+    # # Add ngram nodes
+    # for ngram in ngrams:
+    #   graph.add_node(next_id, type="keyword", entity_id=ngram)
 
-      words_ids[ngram] = next_id
-      next_id += 1
+    #   words_ids[ngram] = next_id
+    #   next_id += 1
 
-    #        Add word-word edges (undirected)
-    for w1, w2, weight in ngram_ngram_edges:
-      graph.add_edge(words_ids[w1], words_ids[w2], weight=weight)
-      graph.add_edge(words_ids[w2], words_ids[w1], weight=weight)
+    # #        Add word-word edges (undirected)
+    # for w1, w2, weight in ngram_ngram_edges:
+    #   graph.add_edge(words_ids[w1], words_ids[w2], weight=weight)
+    #   graph.add_edge(words_ids[w2], words_ids[w1], weight=weight)
 
-    # Add paper-word edges (undirected)
-    for paper, word, weight in paper_ngram_edges:
-      graph.add_edge(pubs_ids[paper], words_ids[word], weight=weight)
-      graph.add_edge(words_ids[word], pubs_ids[paper], weight=weight)
+    # # Add paper-word edges (undirected)
+    # for paper, word, weight in paper_ngram_edges:
+    #   graph.add_edge(pubs_ids[paper], words_ids[word], weight=weight)
+    #   graph.add_edge(words_ids[word], pubs_ids[paper], weight=weight)
 
     ####################################
     # Add venues to the graph
@@ -1098,7 +1098,7 @@ class ModelBuilder:
                           if not rst:
                             rst = college_prog2.search(normal_affil_name)
                             if not rst:
-                              print affil_names[0]
+                              # print affil_names[0]
                               # import pdb;pdb.set_trace()
                               continue
 
@@ -1139,10 +1139,10 @@ class ModelBuilder:
       else:
         affils.add(affil_id)
         author_affil_edges.add((author_id, affil_id, 1.0))
-    # print "%s/%s"%(count, len(rows))
-    print "authors appear in csx/count: %s/%s"%(author_appear_count, count)
-    print "authors matching affil names/authors appear in csx: %s/%s"%(match_affil_count, author_appear_count)
-    print "authors matching affil ids/authors matching affil names: %s/%s"%(fix_count, match_affil_count)
+    # print "authors appear in csx/count: %s/%s"%(author_appear_count, count)
+    # print "authors matching affil names/authors appear in csx: %s/%s"%(match_affil_count, author_appear_count)
+    # print "authors matching affil ids/authors matching affil names: %s/%s"%(fix_count, match_affil_count)
+    # print len(affils), len(author_affil_edges)
     return list(affils), list(author_affil_edges)
 
 
@@ -1164,14 +1164,14 @@ class ModelBuilder:
     #       log.debug("%d topics, %d topic-topic edges and %d pub-topic edges."
     #                                       % (len(topics), len(topic_topic_edges), len(pub_topic_edges)))
 
-    # Use the standard ngrams formulation if the config says so
-    if config.KEYWORDS == "ngrams":
-      words, word_word_edges, pub_word_edges = self.get_ngrams_layer_from_db(pubs, min_ngram_lift)
+    # # Use the standard ngrams formulation if the config says so
+    # if config.KEYWORDS == "ngrams":
+    #   words, word_word_edges, pub_word_edges = self.get_ngrams_layer_from_db(pubs, min_ngram_lift)
 
-    # Otherwise use some variant of a keywords' layer
-    else:
-      words, word_word_edges, pub_word_edges = self.get_keywords_layer_from_db(pubs, min_ngram_lift)
-    log.debug("%d words and %d pub-word edges." % (len(words), len(pub_word_edges)))
+    # # Otherwise use some variant of a keywords' layer
+    # else:
+    #   words, word_word_edges, pub_word_edges = self.get_keywords_layer_from_db(pubs, min_ngram_lift)
+    # log.debug("%d words and %d pub-word edges." % (len(words), len(pub_word_edges)))
 
     # venues, pub_venue_edges = self.get_venues_layer(pubs)
     # log.debug("%d venues and %d pub-venue edges." % (len(venues), len(pub_venue_edges)))
@@ -1183,7 +1183,7 @@ class ModelBuilder:
                    authors, coauth_edges, auth_edges,
                    # None, None, None,
                    #                                                        topics, topic_topic_edges, pub_topic_edges,
-                   words, word_word_edges, pub_word_edges,
+                   # words, word_word_edges, pub_word_edges,
                    # venues, pub_venue_edges,
                    affils, author_affil_edges)
 

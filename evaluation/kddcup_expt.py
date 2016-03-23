@@ -99,12 +99,12 @@ def main():
                 "SIGMOD",
                 "SIGCOMM",
 
-                "KDD", # Phase 2
-                "ICML",
+                # "KDD", # Phase 2
+                # "ICML",
 
-                "FSE", # Phase 3
-                "MobiCom",
-                "MM",
+                # "FSE", # Phase 3
+                # "MobiCom",
+                # "MM",
             ]
 
     searchers = [
@@ -134,11 +134,11 @@ def main():
                 s.set_params(**{
                               'H': 1,
                               # 'age_relev': 0.01, # 0.01
-                              'papers_relev': .2,
-                              'authors_relev': .3,
-                              'words_relev': .2,
+                              'papers_relev': .4,
+                              'authors_relev': .6,
+                              # 'words_relev': .2,
                               # 'venues_relev' : .2,
-                              'affils_relev': .3,
+                              'affils_relev': .55,
                               'alpha': 0.2}) # 0.1
 
             rfile = get_results_file(c, s.name())

@@ -183,9 +183,17 @@ def rank_nodes(graph, papers_relev=0.2,
 
     # Layer relevance parameters are exponentiate to increase sensitivity and normalized to sum to 1
 #   rho = np.exp([papers_relev, authors_relev, topics_relev, words_relev])
-    rho = np.asarray([papers_relev, authors_relev, words_relev, affils_relev])
+    rho = np.asarray([papers_relev, authors_relev, affils_relev])
+    # rho = np.asarray([papers_relev, authors_relev, words_relev, affils_relev])
     # rho = np.asarray([papers_relev, authors_relev, words_relev, venues_relev, affils_relev])
-    rho_papers, rho_authors, rho_words, rho_affils = rho/rho.sum()
+
+    # Each row and col sumps up to 1
+    rho_papers = rho[0] / (rho[0] + rho[1])
+    rho_authors = rho[1] / (rho[0] + rho[1])
+    rho_affils = rho[2]
+
+    # rho_papers, rho_authors, rho_affils = rho/rho.sum()
+    # rho_papers, rho_authors, rho_words, rho_affils = rho/rho.sum()
     # rho_papers, rho_authors, rho_words, rho_venues, rho_affils = rho/rho.sum()
 
     # log.debug("Transitions paper -> x: paper=%.3f, author=%.3f, words=%.3f, venues=%.3f" %
@@ -194,10 +202,13 @@ def rank_nodes(graph, papers_relev=0.2,
     # Transition probabilities between layers. The rows and columns correspond to
     # the papers, authors, topics and words layers. So for example, the value at
     # (i,j) is the probability of the random walker to go from layer i to layer j.
-    rho = np.array([[rho_papers,     rho_authors,    rho_words,          0],
-                [rho_authors,  1.0-rho_authors-rho_affils,    0,         rho_affils],
-                [rho_words,                  0,   1.0-rho_words,              0],
-                [         0,       rho_affils,          0,     0,      1.0-rho_affils]])
+    rho = np.array([[rho_papers,     rho_authors,              0],
+                [rho_authors,  1.0-rho_authors-rho_affils,             rho_affils],
+                [         0,       rho_affils,                 1.0-rho_affils]])
+    # rho = np.array([[rho_papers,     rho_authors,    rho_words,          0],
+    #             [rho_authors,  1.0-rho_authors-rho_affils,    0,         rho_affils],
+    #             [rho_words,                  0,   1.0-rho_words,              0],
+    #             [         0,       rho_affils,          0,     0,      1.0-rho_affils]])
     # rho = np.array([[rho_papers,     rho_authors,    rho_words,      rho_venues,    0],
     #             [rho_authors,  1.0-rho_authors-rho_affils,    0,     0,    rho_affils],
     #             [rho_words,                  0,   1.0-rho_words,              0,    0],
@@ -206,7 +217,8 @@ def rank_nodes(graph, papers_relev=0.2,
 
     # Maps the layers name to the dimensions
     # layers = {"paper":0, "author":1, "keyword":2, "venue":3, "affil":4}
-    layers = {"paper":0, "author":1, "keyword":2, "affil":3}
+    # layers = {"paper":0, "author":1, "keyword":2, "affil":3}
+    layers = {"paper":0, "author":1, "affil":2}
 
     # Alias vector to map nodes into their types (paper, author, etc.) already
     # as their numeric representation (paper=0, author=1, etc.) as listed above.
@@ -294,7 +306,7 @@ def rank_nodes(graph, papers_relev=0.2,
     pers = {node: uniform_pers*is_affil(node) for node in graph.nodes()} # try random jump on affils
 
     # Run page rank on the constructed graph
-    scores, _niters = pagerank(graph, alpha=(1.0-alpha), pers=pers, node_types=node_types, max_iter=200)
+    scores, _niters = pagerank(graph, alpha=(1.0-alpha), pers=pers, node_types=node_types, max_iter=10000)
 
 #   if stats_file :
 #       with open(stats_file, "a") as f :
