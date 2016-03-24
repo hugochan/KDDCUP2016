@@ -808,21 +808,21 @@ def get_selected_pubs(conf_name=None, year=None):
     else:
         where_cond = None
 
-    rst = db.select(['selected_papers.id', 'paper_author_affils.author_id', 'paper_author_affils.affil_id'], \
+    rst = db.select(['selected_papers.id', 'paper_author_affils.author_id', 'paper_author_affils.affil_id', 'selected_papers.year'], \
             ['selected_papers', 'paper_author_affils'], join_on=['id', 'paper_id'], \
             where=where_cond)
 
 
     # re-pack data to this format: {paper_id: {author_id:[affil_id,],},}
     pub_records = defaultdict()
-    for paper_id, author_id, affil_id in rst:
+    for paper_id, author_id, affil_id, year in rst:
         if pub_records.has_key(paper_id):
-            if pub_records[paper_id].has_key(author_id):
-                pub_records[paper_id][author_id].append(affil_id)
+            if pub_records[paper_id]['author'].has_key(author_id):
+                pub_records[paper_id]['author'][author_id].append(affil_id)
             else:
-                pub_records[paper_id][author_id] = [affil_id]
+                pub_records[paper_id]['author'][author_id] = [affil_id]
         else:
-            pub_records[paper_id] = {author_id: [affil_id]}
+            pub_records[paper_id] = {'author': {author_id: [affil_id]}, 'year':int(year)}
 
     return pub_records
 

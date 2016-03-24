@@ -162,8 +162,10 @@ class GraphBuilder:
     self.cited = defaultdict(list)
 
     for f, t in edges:
-      self.citing[str(f)].append(str(t))
-      self.cited[str(t)].append(str(f))
+      f = str(f).strip('\r\n')
+      t = str(t).strip('\r\n')
+      self.citing[f].append(t)
+      self.cited[t].append(f)
 
 
   def follow_nodes(self, nodes):
@@ -1139,10 +1141,10 @@ class ModelBuilder:
       else:
         affils.add(affil_id)
         author_affil_edges.add((author_id, affil_id, 1.0))
-    # print "authors appear in csx/count: %s/%s"%(author_appear_count, count)
-    # print "authors matching affil names/authors appear in csx: %s/%s"%(match_affil_count, author_appear_count)
-    # print "authors matching affil ids/authors matching affil names: %s/%s"%(fix_count, match_affil_count)
-    # print len(affils), len(author_affil_edges)
+    print "authors appear in csx/count: %s/%s"%(author_appear_count, count)
+    print "authors matching affil names/authors appear in csx: %s/%s"%(match_affil_count, author_appear_count)
+    print "authors matching affil ids/authors matching affil names: %s/%s"%(fix_count, match_affil_count)
+    print len(affils), len(author_affil_edges)
     return list(affils), list(author_affil_edges)
 
 

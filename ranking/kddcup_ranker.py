@@ -103,12 +103,15 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
     # "dangling" nodes, no links out from them
     out_degree=W.out_degree()
     dangle=[n for n in W if out_degree[n]==0.0]
+
     i=0
     while True: # power iteration: make up to max_iter iterations
             xlast=x
             x=dict.fromkeys(xlast.keys(), 0)
 
+            # "dangling" nodes only consume energies, so we release these energies manually
             danglesum=alpha*scale*sum(xlast[n] for n in dangle)
+            # danglesum = 0
             for n in x:
                     # this matrix multiply looks odd because it is
                     # doing a left multiply x^T=xlast^T*W
@@ -122,7 +125,9 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
 #                               print node_types[nbr], dx
 #                               print
 
-                    x[n]+=danglesum+(1-alpha)*pers[n]
+
+                    x[n]+=danglesum+(1-alpha)*np.array(pers.values()).dot(np.array(xlast.values()))
+                    # x[n]+=danglesum+(1-alpha)*pers[n]
 #                   l[n][4]+=danglesum+(1.0-alpha)*pers[n]
 
             # normalize vector
@@ -161,7 +166,7 @@ def rank_nodes(graph, papers_relev=0.2,
                                          # topics_relev=0.2,
                                          words_relev=0.2,
                                          venues_relev=0.2,
-                                         affils_relev=0.2,
+                                         author_affils_relev=0.2,
                                          age_relev=0.5,
                                          # query_relev=0.5,
                                          # ctx_relev=0.5,
@@ -183,9 +188,9 @@ def rank_nodes(graph, papers_relev=0.2,
 
     # Layer relevance parameters are exponentiate to increase sensitivity and normalized to sum to 1
 #   rho = np.exp([papers_relev, authors_relev, topics_relev, words_relev])
-    rho = np.asarray([papers_relev, authors_relev, affils_relev])
-    # rho = np.asarray([papers_relev, authors_relev, words_relev, affils_relev])
-    # rho = np.asarray([papers_relev, authors_relev, words_relev, venues_relev, affils_relev])
+    rho = np.asarray([papers_relev, authors_relev, author_affils_relev])
+    # rho = np.asarray([papers_relev, authors_relev, words_relev, author_affils_relev])
+    # rho = np.asarray([papers_relev, authors_relev, words_relev, venues_relev, author_affils_relev])
 
     # Each row and col sumps up to 1
     rho_papers = rho[0] / (rho[0] + rho[1])
@@ -204,7 +209,7 @@ def rank_nodes(graph, papers_relev=0.2,
     # (i,j) is the probability of the random walker to go from layer i to layer j.
     rho = np.array([[rho_papers,     rho_authors,              0],
                 [rho_authors,  1.0-rho_authors-rho_affils,             rho_affils],
-                [         0,       rho_affils,                 1.0-rho_affils]])
+                [         0,       1.0,                 0]])
     # rho = np.array([[rho_papers,     rho_authors,    rho_words,          0],
     #             [rho_authors,  1.0-rho_authors-rho_affils,    0,         rho_affils],
     #             [rho_words,                  0,   1.0-rho_words,              0],
@@ -214,7 +219,7 @@ def rank_nodes(graph, papers_relev=0.2,
     #             [rho_words,                  0,   1.0-rho_words,              0,    0],
     #             [rho_venues,                0,               0,  1.0-rho_venues,    0],
     #             [         0,       rho_affils,          0,     0,      1.0-rho_affils]])
-
+    print rho
     # Maps the layers name to the dimensions
     # layers = {"paper":0, "author":1, "keyword":2, "venue":3, "affil":4}
     # layers = {"paper":0, "author":1, "keyword":2, "affil":3}
@@ -222,11 +227,12 @@ def rank_nodes(graph, papers_relev=0.2,
 
     # Alias vector to map nodes into their types (paper, author, etc.) already
     # as their numeric representation (paper=0, author=1, etc.) as listed above.
-    node_types = {u: layers[graph.node[u]["type"]] for u in graph.nodes()}
 
+    node_types = {u: layers[graph.node[u]["type"]] for u in graph.nodes()}
     # Quick alias method to check if the node is paper or affil
     is_paper = lambda n: (node_types[n] == layers["paper"])
     is_affil = lambda n: (node_types[n] == layers["affil"])
+    # is_author = lambda n: (node_types[n] == layers["author"])
 
 #   print graph.number_of_nodes(),
 
@@ -297,6 +303,8 @@ def rank_nodes(graph, papers_relev=0.2,
     # query weighting is applied.
 
     # We do not have query relevance in this task.
+
+    # option 1) random jump on affils, works well
     naffils = 0
     for u in graph.nodes():
         if is_affil(u):
@@ -304,6 +312,26 @@ def rank_nodes(graph, papers_relev=0.2,
 
     uniform_pers = 1.0/naffils
     pers = {node: uniform_pers*is_affil(node) for node in graph.nodes()} # try random jump on affils
+
+    # # option 2) random jump on affils and authors, doesn't improve results compared to 1)
+    # nn = 0
+    # for u in graph.nodes():
+    #     if is_affil(u) or is_author(u):
+    #         nn += 1
+
+    # uniform_pers = 1.0/nn
+    # pers = {node: uniform_pers*(is_affil(node) or is_author(node)) for node in graph.nodes()} # try random jump on affils or authors
+
+
+
+    # # option 3) random jump on affils, authors and papers, doesn't improve results compared to 1)
+    # nn = 0
+    # for u in graph.nodes():
+    #     if is_affil(u) or is_author(u) or is_paper(u):
+    #         nn += 1
+
+    # uniform_pers = 1.0/nn
+    # pers = {node: uniform_pers*(is_affil(node) or is_author(node) or is_paper(u)) for node in graph.nodes()} # try random jump on affils or authors
 
     # Run page rank on the constructed graph
     scores, _niters = pagerank(graph, alpha=(1.0-alpha), pers=pers, node_types=node_types, max_iter=10000)

@@ -24,7 +24,7 @@ def rank_affils(selected_affils, conf_name, year, searcher, show=True, results_f
     start = time.time()
 
     if searcher.name() == "SimpleSearcher":
-        results = searcher.search(selected_affils, conf_name, year, rtype="affil")
+        results = searcher.search(selected_affils, conf_name, year, age_decay=True, rtype="affil")
         # normalize ranking score
         ids, scores = zip(*results)
         scores = np.array(scores)
@@ -120,16 +120,21 @@ def main():
         for s in searchers:
             print "Running %s." % s.name()
 
+            if s.name() == "SimpleSearcher":
+                s.set_params(**{
+                              'age_relev': .5,
+                              })
+
             if s.name() == "MultiLayered":
                 s.set_params(**{
-                              'H': 1,
+                              'H': 0,
                               # 'age_relev': 0.01, # 0.01
-                              'papers_relev': .2,
-                              'authors_relev': .3,
-                              'words_relev': .2,
+                              'papers_relev': .99, # .99
+                              'authors_relev': .01, # .01
+                              # 'words_relev': .2,
                               # 'venues_relev' : .2,
-                              'affils_relev': .3,
-                              'alpha': 0.05}) # 0.1
+                              'author_affils_relev': .95, # .95
+                              'alpha': 0.25}) # 0.25
 
             rfile = get_results_file(c, "results_%s"%s.name())
             rank_affils(selected_affils, c, year, s, results_file=rfile)

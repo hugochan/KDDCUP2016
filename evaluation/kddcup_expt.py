@@ -22,11 +22,19 @@ from ranking.kddcup_searchers import simple_search, SimpleSearcher, Searcher
 db = MyMySQL(db=config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
 
 
+def get_affil_based_on_id(affil_ids):
+    affil_names = []
+    for each in affil_ids:
+        affil_name = db.select("name", "affils", where="id='%s'"%each, limit=1)[0]
+        affil_names.append(affil_name)
+
+    return affil_names
+
 def calc_ground_truth_score(selected_affils, conf_name, year="2015"): # {paper_id: {author_id:[affil_id,],},}
     """
     Uses latest pub records to estimate ground truth scores.
     """
-    ground_truth = simple_search(selected_affils, conf_name, year)
+    ground_truth = simple_search(selected_affils, conf_name, year, age_decay=False)
 
     return ground_truth
 
@@ -70,7 +78,7 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     start = time.time()
 
     if searcher.name() == "SimpleSearcher":
-        results = searcher.search(selected_affils, conf_name, year, rtype="affil")
+        results = searcher.search(selected_affils, conf_name, year, age_decay=False, rtype="affil")
     else:
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
 
@@ -79,6 +87,21 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     actual, relevs = zip(*ground_truth)
     pred = zip(*results)[0]
 
+    actual_affils = get_affil_based_on_id(actual)
+    # ground_5y = simple_search(selected_affils, conf_name, [2011,2012,2013,2014,2015], age_decay=False)
+    # ground_5y_affils = get_affil_based_on_id(zip(*ground_5y)[0])
+    # ground_4y = simple_search(selected_affils, conf_name, [2011,2012,2013,2014], age_decay=False)
+    # ground_4y_affils = get_affil_based_on_id(zip(*ground_4y)[0])
+
+    pred_affils = get_affil_based_on_id(pred)
+    print "actual affils"
+    print actual_affils[:20]
+    print "pred affils"
+    print pred_affils[:20]
+    # print "pred scores"
+    # print zip(*results)[1][:20]
+
+    # import pdb;pdb.set_trace()
     metrics["NDCG"] = ndcg2(actual, pred, relevs, k=20)
 
 
@@ -87,7 +110,7 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
 
     if show:
         for k, v in metrics.iteritems():
-            print u"%s: %.1f\t" % (k, v)
+            print u"%s: %f\t" % (k, v)
         print
 
     return metrics
@@ -108,7 +131,7 @@ def main():
             ]
 
     searchers = [
-                    # SimpleSearcher(),
+                    # SimpleSearcher(**config.PARAMS),
                     Searcher(**config.PARAMS),
 
                 ]
@@ -130,16 +153,21 @@ def main():
         for s in searchers :
             print "Running %s." % s.name()
 
+            if s.name() == "SimpleSearcher":
+                s.set_params(**{
+                              'age_relev': .5,
+                              })
+
             if s.name() == "MultiLayered":
                 s.set_params(**{
-                              'H': 1,
+                              'H': 0,
                               # 'age_relev': 0.01, # 0.01
-                              'papers_relev': .4,
-                              'authors_relev': .6,
+                              'papers_relev': .99, # .99
+                              'authors_relev': .01, # .01
                               # 'words_relev': .2,
                               # 'venues_relev' : .2,
-                              'affils_relev': .55,
-                              'alpha': 0.2}) # 0.1
+                              'author_affils_relev': .95, # .95
+                              'alpha': 0.25}) # 0.25
 
             rfile = get_results_file(c, s.name())
             get_search_metrics(selected_affils, ground_truth, c, year, s,\
