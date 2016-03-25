@@ -80,24 +80,24 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     if searcher.name() == "SimpleSearcher":
         results = searcher.search(selected_affils, conf_name, year, age_decay=False, rtype="affil")
     else:
-        results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
+        results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=False, rtype="affil")
 
     metrics["Time"] = time.time() - start
 
     actual, relevs = zip(*ground_truth)
     pred = zip(*results)[0]
 
-    actual_affils = get_affil_based_on_id(actual)
+    # actual_affils = get_affil_based_on_id(actual)
     # ground_5y = simple_search(selected_affils, conf_name, [2011,2012,2013,2014,2015], age_decay=False)
     # ground_5y_affils = get_affil_based_on_id(zip(*ground_5y)[0])
     # ground_4y = simple_search(selected_affils, conf_name, [2011,2012,2013,2014], age_decay=False)
     # ground_4y_affils = get_affil_based_on_id(zip(*ground_4y)[0])
 
-    pred_affils = get_affil_based_on_id(pred)
-    print "actual affils"
-    print actual_affils[:20]
-    print "pred affils"
-    print pred_affils[:20]
+    # pred_affils = get_affil_based_on_id(pred)
+    # print "actual affils"
+    # print actual_affils[:20]
+    # print "pred affils"
+    # print pred_affils[:20]
     # print "pred scores"
     # print zip(*results)[1][:20]
 
@@ -119,8 +119,8 @@ def main():
 
     confs = [
                 "SIGIR", # Phase 1
-                "SIGMOD",
-                "SIGCOMM",
+                # "SIGMOD",
+                # "SIGCOMM",
 
                 # "KDD", # Phase 2
                 # "ICML",

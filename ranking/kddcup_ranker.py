@@ -23,6 +23,10 @@ import time
 from networkx.algorithms.centrality.katz import katz_centrality
 
 
+# params=                           {  'papers_relev': .5, # .5
+#                               'authors_relev': .5, # .5
+#                               'author_affils_relev': .3, # .3
+# }
 
 def pagerank(G, alpha=0.85, pers=None, max_iter=100,
                          tol=1.0e-8, nstart=None, weight='weight', node_types=None):
@@ -112,6 +116,7 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
             # "dangling" nodes only consume energies, so we release these energies manually
             danglesum=alpha*scale*sum(xlast[n] for n in dangle)
             # danglesum = 0
+
             for n in x:
                     # this matrix multiply looks odd because it is
                     # doing a left multiply x^T=xlast^T*W
@@ -125,6 +130,31 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
 #                               print node_types[nbr], dx
 #                               print
 
+                    # x[n] += danglesum
+                    # if G.node[n]['type'] == 'affil':
+                    #     for kk, vv in pers.items():
+                    #         if G.node[kk]['type'] == 'affil':
+                    #             x[n] += (1-params['author_affils_relev'])*(1-alpha)*vv*xlast[kk]
+                    #         elif G.node[kk]['type'] == 'author':
+                    #             x[n] += params['author_affils_relev']*(1-alpha)*vv*xlast[kk]
+                    # elif G.node[n]['type'] == 'author':
+                    #     for kk, vv in pers.items():
+                    #         if G.node[kk]['type'] == 'author':
+                    #             x[n] += (1-params['author_affils_relev']-params['authors_relev'])*(1-alpha)*vv*xlast[kk]
+
+                    #         elif G.node[kk]['type'] == 'affil':
+                    #             x[n] += params['author_affils_relev']*(1-alpha)*vv*xlast[kk]
+
+                    #         elif G.node[kk]['type'] == 'paper':
+                    #             x[n] += params['authors_relev']*(1-alpha)*vv*xlast[kk]
+                    # elif G.node[n]['type'] == 'paper':
+                    #     for kk, vv in pers.items():
+                    #         if G.node[kk]['type'] == 'paper':
+                    #             x[n] += params['papers_relev']*(1-alpha)*vv*xlast[kk]
+
+                    #         elif G.node[kk]['type'] == 'author':
+
+                    #             x[n] += params['authors_relev']*(1-alpha)*vv*xlast[kk]
 
                     x[n]+=danglesum+(1-alpha)*np.array(pers.values()).dot(np.array(xlast.values()))
                     # x[n]+=danglesum+(1-alpha)*pers[n]
@@ -232,7 +262,7 @@ def rank_nodes(graph, papers_relev=0.2,
     # Quick alias method to check if the node is paper or affil
     is_paper = lambda n: (node_types[n] == layers["paper"])
     is_affil = lambda n: (node_types[n] == layers["affil"])
-    # is_author = lambda n: (node_types[n] == layers["author"])
+    is_author = lambda n: (node_types[n] == layers["author"])
 
 #   print graph.number_of_nodes(),
 
@@ -304,14 +334,15 @@ def rank_nodes(graph, papers_relev=0.2,
 
     # We do not have query relevance in this task.
 
-    # option 1) random jump on affils, works well
-    naffils = 0
-    for u in graph.nodes():
-        if is_affil(u):
-            naffils += 1
+    # # option 1) random jump on affils
+    # naffils = 0
+    # for u in graph.nodes():
+    #     if is_affil(u):
+    #         naffils += 1
 
-    uniform_pers = 1.0/naffils
-    pers = {node: uniform_pers*is_affil(node) for node in graph.nodes()} # try random jump on affils
+
+    # uniform_pers = 1.0/naffils
+    # pers = {node: uniform_pers*is_affil(node) for node in graph.nodes()} # try random jump on affils
 
     # # option 2) random jump on affils and authors, doesn't improve results compared to 1)
     # nn = 0
@@ -324,14 +355,62 @@ def rank_nodes(graph, papers_relev=0.2,
 
 
 
-    # # option 3) random jump on affils, authors and papers, doesn't improve results compared to 1)
-    # nn = 0
-    # for u in graph.nodes():
-    #     if is_affil(u) or is_author(u) or is_paper(u):
-    #         nn += 1
+    # option 3) random jump on in the whole network, doesn't improve results compared to 1)
+    uniform_pers = 1.0/len(graph.nodes())
+    pers = {node: uniform_pers for node in graph.nodes()} # try random jump on affils or authors
 
-    # uniform_pers = 1.0/nn
-    # pers = {node: uniform_pers*(is_affil(node) or is_author(node) or is_paper(u)) for node in graph.nodes()} # try random jump on affils or authors
+
+   # # option 4) random jump on separated multilayers
+   #  naffils = 0
+   #  nauthors = 0
+   #  npapers = 0
+   #  for u in graph.nodes():
+   #      if is_affil(u):
+   #          naffils += 1
+   #      if is_author(u):
+   #          nauthors += 1
+   #      if is_paper(u):
+   #          npapers += 1
+
+   #  uniform_affil_pers = 1.0/naffils
+   #  uniform_author_pers = 1.0/nauthors
+   #  uniform_paper_pers = 1.0/npapers
+
+   #  pers = defaultdict()
+   #  for node in graph.nodes():
+   #      if is_affil(node):
+   #          pers[node] = uniform_affil_pers
+   #      if is_author(node):
+   #          pers[node] = uniform_author_pers
+   #      if is_paper(node):
+   #          pers[node] = uniform_paper_pers
+
+
+   # # option 5) random jump on separated multilayers
+   #  naffils = 0
+   #  nauthors = 0
+   #  npapers = 0
+   #  for u in graph.nodes():
+   #      if is_affil(u):
+   #          naffils += 1
+   #      if is_author(u):
+   #          nauthors += 1
+   #      if is_paper(u):
+   #          npapers += 1
+
+   #  uniform_affil_pers = 1.0 / (naffils + nauthors)
+   #  uniform_author_pers = 1.0 / (nauthors + npapers + naffils)
+   #  uniform_paper_pers = 1.0/ (npapers + nauthors)
+
+   #  pers = defaultdict()
+   #  for node in graph.nodes():
+   #      if is_affil(node):
+   #          pers[node] = uniform_affil_pers
+   #      if is_author(node):
+   #          pers[node] = uniform_author_pers
+   #      if is_paper(node):
+   #          pers[node] = uniform_paper_pers
+
 
     # Run page rank on the constructed graph
     scores, _niters = pagerank(graph, alpha=(1.0-alpha), pers=pers, node_types=node_types, max_iter=10000)
