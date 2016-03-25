@@ -119,8 +119,8 @@ def main():
 
     confs = [
                 "SIGIR", # Phase 1
-                # "SIGMOD",
-                # "SIGCOMM",
+                "SIGMOD",
+                "SIGCOMM",
 
                 # "KDD", # Phase 2
                 # "ICML",
@@ -162,11 +162,11 @@ def main():
                 s.set_params(**{
                               'H': 0,
                               # 'age_relev': 0.01, # 0.01
-                              'papers_relev': .99, # .99
-                              'authors_relev': .01, # .01
+                              'papers_relev': .8, # .99
+                              'authors_relev': .2, # .01
                               # 'words_relev': .2,
                               # 'venues_relev' : .2,
-                              'author_affils_relev': .95, # .95
+                              'author_affils_relev': .79, # .95
                               'alpha': 0.25}) # 0.25
 
             rfile = get_results_file(c, s.name())

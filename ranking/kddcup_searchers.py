@@ -58,7 +58,7 @@ def build_graph(conf_name, year, H, min_topic_lift, min_ngram_lift, exclude=[], 
     return graph
 
 
-def simple_search(selected_affils, conf_name, year, age_decay=False, age_relev=0.0):
+def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=False, age_relev=0.0):
     """
     Parameters
     -----------
@@ -70,14 +70,20 @@ def simple_search(selected_affils, conf_name, year, age_decay=False, age_relev=0
     """
     affil_scores = defaultdict()
     pub_records = get_selected_pubs(conf_name, year)
+
+    # expand docs set by getting more papers accepted by the targeted conference
+    if expand_year:
+        expand_recrods = get_expand_pubs(conf_name, year)
+
+
     current_year = config.PARAMS['current_year']
     old_year = config.PARAMS['old_year']
 
     for _, record in pub_records.iteritems():
 
         if age_decay:
-            year = min(max(record['year'], old_year), current_year)
-            weight = np.exp(-(age_relev)*(current_year-year))
+            pub_year = min(max(record['year'], old_year), current_year)
+            weight = np.exp(-(age_relev)*(current_year-pub_year))
         else:
             weight = 1.0
 

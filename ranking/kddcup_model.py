@@ -10,7 +10,6 @@ import networkx as nx
 from mymysql import MyMySQL
 from collections import defaultdict
 from exceptions import TypeError
-import re
 
 # from pylucene import Index
 import itertools
@@ -19,8 +18,7 @@ import logging as log
 import words
 import config
 import utils
-from datasets.mag import get_selected_docs, get_conf_docs
-from datasets.affil_names import *
+from datasets.mag import get_selected_docs, get_conf_docs, retrieve_affils_by_authors
 
 
 
@@ -253,6 +251,7 @@ class ModelBuilder:
     docs = get_selected_docs(conf_name, year)
 
     if expand_method == 'n_hops':
+
       # Get doc ids as uni-dimensional list
       self.edges_lookup = GraphBuilder(get_all_edges(docs))
       nodes = set(docs)
@@ -262,8 +261,9 @@ class ModelBuilder:
 
 
     elif expand_method == 'conf':
+
       # Expand the docs by getting more papers from the targeted conference
-      nodes = get_expanded_pubs_by_conf(docs, conf_name, [2009, 2010], exclude_list)
+      nodes = self.get_expanded_pubs_by_conf(docs, conf_name, [2009, 2010], exclude_list)
       self.edges_lookup = GraphBuilder(get_all_edges(nodes))
 
     else:
@@ -286,7 +286,7 @@ class ModelBuilder:
     return nodes, weighted_edges
 
 
-  def get_expanded_pubs_by_conf(docs, conf_name, year, exclude_list):
+  def get_expanded_pubs_by_conf(self, docs, conf_name, year, exclude_list):
     # Expand the docs by getting more papers from the targeted conference
     nodes = set(docs)
     conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
@@ -299,7 +299,7 @@ class ModelBuilder:
     return list(nodes)
 
 
-  def get_expanded_pubs_by_nhops(nodes, edges_lookup, exclude_list, n_hops):
+  def get_expanded_pubs_by_nhops(self, nodes, edges_lookup, exclude_list, n_hops):
     new_nodes = nodes
 
     # We hop h times including all the nodes from these hops
@@ -314,7 +314,7 @@ class ModelBuilder:
 
       log.debug("Hop %d: %d nodes." % (h + 1, len(nodes)))
 
-      return nodes
+    return nodes
 
 
   def get_paper_based_coauthorships(self, papers, weighted=True):
@@ -999,7 +999,7 @@ class ModelBuilder:
     return list(venues), pub_venue_edges
 
 
-  def get_affils_layer(self, authors):
+  def get_affils_layer(self, authors, related_papers):
     """
     Returns the affils' ids and edges from authors to affiliations according
     to authors.
@@ -1012,167 +1012,88 @@ class ModelBuilder:
     else:
       raise TypeError("Parameter 'authors' is of unsupported type. Iterable needed.")
 
-    affil_stopwords = ['university', 'department', 'of', 'and', 'college', 'institute']
+    if hasattr(related_papers, '__iter__'):
+      if len(related_papers) == 0:
+        return [], []
+      else:
+        paper_str = ",".join(["'%s'" % paper_id for paper_id in related_papers])
+    else:
+      raise TypeError("Parameter 'related_papers' is of unsupported type. Iterable needed.")
+
 
     affils = set()
     author_affil_edges = set()
-    rows = db.select(["author_id", "affil_id"], "paper_author_affils", where="author_id IN (%s)"%author_str)
-
-    count = 0
-    author_appear_count = 0
-    match_affil_count = 0
-    fix_count = 0
-    tmp = set()
-    tmp_authors = set()
-    univ_academy_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(University|Academy)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
-    institute_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(Institute)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
-    college_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(College)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
-
-    univ_academy_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(University|Academy)[^,;:.\\d]*$'
-    institute_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(Institute)[^,;:.\\d]*$'
-    college_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(College)[^,;:.\\d]*$'
+    rows = db.select(["paper_id", "author_id", "affil_id"], "paper_author_affils",\
+           where="author_id IN (%s) and paper_id IN (%s)"%(author_str, paper_str))
 
 
-    univ_academy_prog = re.compile(univ_academy_pattern)
-    institute_prog = re.compile(institute_pattern)
-    college_prog = re.compile(college_pattern)
-
-    univ_academy_prog2 = re.compile(univ_academy_pattern2)
-    institute_prog2 = re.compile(institute_pattern2)
-    college_prog2 = re.compile(college_pattern2)
-
-    for author_id, affil_id in rows:
-      # Since coverage of affils in MAG dataset is quite low,
-      # we use data from CSX dataset as a complement.
+    missing_count = 0
+    missing_author = 0
+    hit_count = 0
+    author_affils = defaultdict()
+    for paper_id, author_id, affil_id in rows:
       if affil_id == '':
-        try:
-          if author_id in tmp_authors:
-            continue
+        missing_count += 1
+      try:
+        author_affils[author_id].add(affil_id)
+      except:
+        author_affils[author_id] = set([affil_id])
 
-          count += 1
-          tmp_authors.add(author_id)
-          # import pdb;pdb.set_trace()
-          author_name = db.select("name", "authors", where="id='%s'"%author_id, limit=1)[0].strip('\r\n').strip()
-          affil_names = db.select("affil", "csx_authors", where="name='%s'"%author_name)
+    for author_id, affil_ids in author_affils.iteritems():
+      for each in affil_ids:
+        if each != '':
+          affils.add(each)
+          author_affil_edges.add((author_id, each, 1.0))
+        else:
+          # To be improved, we only retrieve affils
+          # when we don't know any affils which the author belongs to
+          if len(affil_ids) == 1:
+            missing_author += 1
+            # we check external data (e.g., csx dataset) and do string matching which is knotty.
+            match_affil_ids = retrieve_affils_by_authors(author_id)
+            if match_affil_ids:
+              hit_count += 1
+            for each_affil in match_affil_ids:
+              affils.add(each_affil)
+              author_affil_edges.add((author_id, each_affil, 1.0))
 
-          if affil_names:
-            # for each in set(affil_names):
-            # print affil_names[0]
-            # print '\r\n'
-            if affil_names[0]: # not None or empty string
-              author_appear_count += 1
+    print "missing count: %s"%missing_count
+    print "missing author: %s"%missing_author
+    print "hit count: %s"%hit_count
 
-              affil_tokens = affil_names[0].lower().replace(",", " ").replace(";", " ").replace(".", " ").replace("-", " ").split()
+    # # count = 0
+    # tmp_authors = set()
+    # for paper_id, author_id, affil_id in rows:
+    #   # Since coverage of affils in MAG dataset is quite low,
+    #   # we use data from CSX dataset as a complement.
+    #   if affil_id == '':
+    #     try:
+    #       if author_id in tmp_authors: # For the sake of simplicity, we don't look up affils in this case.
+    #         continue
 
-              match_flag = False
-              match_affil_ids = set()
+    #       # count += 1
+    #       tmp_authors.add(author_id)
+    #       # import pdb;pdb.set_trace()
 
-              # import pdb;pdb.set_trace()
-              # check if it's a company
-              for com in affil_companies:
-                if isinstance(com, str):
-                  if com in affil_tokens:
-                    name_of_affil = com
-                    match_flag = True
-                    break
-                else:
-                  flag = True
-                  for each in com:
-                    if not each in affil_tokens:
-                      flag = False
-                      break
-                  if flag:
-                    name_of_affil = ' '.join(com)
-                    match_flag = True
-                    break
+    #       # 1) first, we check paper_author_affils table.
+    #       if author_id in rows
+    #       # 2) if 1) fails, then we check csx_authors table and do string matching which is knotty.
+    #       match_affil_ids = retrieve_affils_by_authors(author_id)
 
-              if match_flag: # match a company
-                # print 'company'
-                match_affil_count += 1
-                affil_ids = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil)
-                if affil_ids:
-                  # print affil_ids[0]
-                  # print name_of_affil # we only keep one and ignore sub-affils
-                  # print
-                  fix_count += 1
-                  match_affil_ids.add(affil_ids[0])
-              else:
-                # check if it's an academic institute
+    #       if match_affil_ids:
+    #         affils.update(match_affil_ids)
+    #         for each in match_affil_ids:
+    #           author_affil_edges.add((author_id, each, 1.0))
 
-                # 1) first, check abbr.
-                for abbr, univ in affil_univs.iteritems():
-                  abbr_l = abbr.split()
-                  flag = True
-                  for each in abbr_l:
-                    if not each in affil_tokens:
-                      flag = False
-                      break
-                  if flag:
-                    name_of_affil = univ
-                    match_flag = True
-                    break
+    #     except Exception, e:
+    #       print e
+    #       continue
 
-                if not match_flag:
-                  # 2) then, check full name
-                  normal_affil_name = affil_names[0].title().replace('Univ.', 'University').replace('Umversity', 'University') # low-prob case
+    #   else:
+    #     affils.add(affil_id)
+    #     author_affil_edges.add((author_id, affil_id, 1.0))
 
-                  # try matching university and academy
-                  rst = univ_academy_prog.search(normal_affil_name)
-                  if not rst:
-                    rst = institute_prog.search(normal_affil_name)
-                    if not rst:
-                      rst = college_prog.search(normal_affil_name)
-                      if not rst:
-                        rst = univ_academy_prog2.search(normal_affil_name)
-                        if not rst:
-                          rst = institute_prog2.search(normal_affil_name)
-                          if not rst:
-                            rst = college_prog2.search(normal_affil_name)
-                            if not rst:
-                              # print affil_names[0]
-                              # import pdb;pdb.set_trace()
-                              continue
 
-                  name_of_affil = rst.group(0).replace('-', '').replace('The', '').strip()
-                  match_flag = True
-
-                if match_flag:
-                  # print 'univ.'
-                  match_affil_count += 1
-                  affil_ids = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil)
-                  if affil_ids:
-                    # print affil_ids[0]
-                    # print name_of_affil # we only keep one and ignore sub-affils
-                    # print
-
-                    fix_count += 1
-                    match_affil_ids.add(affil_ids[0])
-                  else:
-                    # print 'yes name, no id'
-                    # import pdb;pdb.set_trace()
-                    pass
-                else:
-                  # print 'no name'
-                  # import pdb;pdb.set_trace()
-                  pass
-
-              if match_affil_ids:
-                affils.update(match_affil_ids)
-                for each in match_affil_ids:
-                  author_affil_edges.add((author_id, each, 1.0))
-          else:
-            # import pdb;pdb.set_trace()
-            pass
-        except Exception, e:
-          print e
-          continue
-
-      else:
-        affils.add(affil_id)
-        author_affil_edges.add((author_id, affil_id, 1.0))
-    print "authors appear in csx/count: %s/%s"%(author_appear_count, count)
-    print "authors matching affil names/authors appear in csx: %s/%s"%(match_affil_count, author_appear_count)
-    print "authors matching affil ids/authors matching affil names: %s/%s"%(fix_count, match_affil_count)
     print len(affils), len(author_affil_edges)
     return list(affils), list(author_affil_edges)
 
@@ -1207,7 +1128,7 @@ class ModelBuilder:
     # venues, pub_venue_edges = self.get_venues_layer(pubs)
     # log.debug("%d venues and %d pub-venue edges." % (len(venues), len(pub_venue_edges)))
 
-    affils, author_affil_edges = self.get_affils_layer(authors)
+    affils, author_affil_edges = self.get_affils_layer(authors, pubs)
     log.debug("%d affiliations and %d pub-affil edges." % (len(affils), len(author_affil_edges)))
 
     graph = self.assemble_layers(pubs, citation_edges,
