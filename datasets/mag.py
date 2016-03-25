@@ -718,6 +718,58 @@ def import_fields_of_study_hierarchy(file_path, table_name='fields_of_study_hier
     f.close()
 
 
+def get_conf_docs(conf_id=None, year=None):
+     """
+    Get pub records from selected conferences in selected years in papers dataset.
+    """
+
+    # Check parameter types
+    if isinstance(conf_id, basestring):
+        conf_name_str = "('%s')"%str(conf_id)
+
+    elif hasattr(conf_id, '__iter__'):
+        if len(conf_id) == 0:
+            return []
+        elif len(conf_id) == 1:
+            conf_id_str = "(%s)" % conf_id[0]
+        else:
+            conf_id_str = str(tuple(conf_id))
+
+    else:
+        raise TypeError("Parameter 'conf_id' is of unsupported type. String or iterable needed.")
+
+    if isinstance(year, basestring):
+        year_str = "(%s)"%str(year)
+
+    elif hasattr(year, '__iter__'):
+        if len(year) == 0:
+            return []
+        elif len(year) == 1:
+            year_str = "(%s)" % year[0]
+        else:
+            year_str = str(tuple(year))
+
+    else:
+        raise TypeError("Parameter 'year' is of unsupported type. String or iterable needed.")
+
+
+    year_cond = "year IN %s"%year_str if year else ""
+    conf_id_cond = "conf_id IN %s"%conf_id_str if conf_id else ""
+
+    if year_cond != '' and conf_id_cond != '':
+        where_cond = '%s AND %s'%(year_cond, conf_id_cond)
+    elif year_cond == '' and conf_id_cond != '':
+        where_cond = conf_id_cond
+    elif year_cond != '' and conf_id_cond == '':
+        where_cond = year_cond
+    else:
+        where_cond = None
+
+    rst = db.select('id', 'papers', where=where_cond)
+
+    return rst
+
+
 
 def get_selected_docs(conf_name=None, year=None):
     """

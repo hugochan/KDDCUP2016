@@ -19,7 +19,7 @@ import logging as log
 import words
 import config
 import utils
-from datasets.mag import get_selected_docs
+from datasets.mag import get_selected_docs, get_conf_docs
 from datasets.affil_names import *
 
 
@@ -243,7 +243,7 @@ class ModelBuilder:
     return [(u, v, 1.0) for (u, v) in edges]
 
 
-  def get_pubs_layer(self, conf_name, year, n_hops, exclude_list=[]):
+  def get_pubs_layer(self, conf_name, year, n_hops, exclude_list=[], expand_method='n_hops'):
     """
     First documents are retrieved from pub records of a targeted conference.
     Then we follow n_hops from these nodes to have the first layer of the graph (papers).
@@ -252,25 +252,23 @@ class ModelBuilder:
     # Fetches all document that have at least one of the terms
     docs = get_selected_docs(conf_name, year)
 
-    self.edges_lookup = GraphBuilder(get_all_edges(docs))
+    if expand_method == 'n_hops':
+      # Get doc ids as uni-dimensional list
+      self.edges_lookup = GraphBuilder(get_all_edges(docs))
+      nodes = set(docs)
+
+      # Expand the docs set by reference
+      nodes = self.get_expanded_pubs_by_nhops(nodes, self.edges_lookup, exclude_list, n_hops)
 
 
+    elif expand_method == 'conf':
+      # Expand the docs by getting more papers from the targeted conference
+      nodes = get_expanded_pubs_by_conf(docs, conf_name, [2009, 2010], exclude_list)
+      self.edges_lookup = GraphBuilder(get_all_edges(nodes))
 
-    # Get doc ids as uni-dimensional list
-    nodes = set(docs)
-    new_nodes = nodes
+    else:
+      raise ValueError("parameter expand_method should either be n_hops or conf.")
 
-    # We hop h times including all the nodes from these hops
-    for h in xrange(n_hops):
-      new_nodes = self.edges_lookup.follow_nodes(new_nodes)
-
-      # Remove documents from the exclude list and keep only processed ids
-      new_nodes -= set(exclude_list)
-
-      # Than add them to the current set
-      nodes.update(new_nodes)
-
-      log.debug("Hop %d: %d nodes." % (h + 1, len(nodes)))
 
     # Get the edges between the given nodes and add a constant the weight for each
     edges = self.edges_lookup.subgraph(nodes)
@@ -286,6 +284,37 @@ class ModelBuilder:
     #       cPickle.dump((nodes, edges, self.query_sims), open(cache_file, 'w'))
 
     return nodes, weighted_edges
+
+
+  def get_expanded_pubs_by_conf(docs, conf_name, year, exclude_list):
+    # Expand the docs by getting more papers from the targeted conference
+    nodes = set(docs)
+    conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
+    expanded_docs = get_conf_docs(conf_id, year)
+    # Remove documents from the exclude list and keep only processed ids
+    expanded_docs = set(expanded_docs) - set(exclude_list)
+
+    nodes.update(expanded_docs)
+
+    return list(nodes)
+
+
+  def get_expanded_pubs_by_nhops(nodes, edges_lookup, exclude_list, n_hops):
+    new_nodes = nodes
+
+    # We hop h times including all the nodes from these hops
+    for h in xrange(n_hops):
+      new_nodes = edges_lookup.follow_nodes(new_nodes)
+
+      # Remove documents from the exclude list and keep only processed ids
+      new_nodes -= set(exclude_list)
+
+      # Than add them to the current set
+      nodes.update(new_nodes)
+
+      log.debug("Hop %d: %d nodes." % (h + 1, len(nodes)))
+
+      return nodes
 
 
   def get_paper_based_coauthorships(self, papers, weighted=True):
