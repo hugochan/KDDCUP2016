@@ -81,9 +81,11 @@ PARAMS = {
 	'words_relev': 0.25,
 	'topics_relev' : 0.0,
 	'venues_relev': 0.25,
-	'affils_relev': 0.25,
+	'author_affils_relev': 0.25,
 	'alpha': 0.3,
 	'query_relev': 5.0,
 	'age_relev': 0.005,
-	'ctx_relev': 0.5
+	'ctx_relev': 0.5,
+	'current_year': 2016,
+	'old_year': 1950
 }

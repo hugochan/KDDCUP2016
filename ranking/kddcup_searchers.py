@@ -13,6 +13,7 @@ import config
 from collections import defaultdict
 import os
 import networkx as nx
+import numpy as np
 
 builder = None
 
@@ -57,7 +58,7 @@ def build_graph(conf_name, year, H, min_topic_lift, min_ngram_lift, exclude=[], 
     return graph
 
 
-def simple_search(selected_affils, conf_name, year):
+def simple_search(selected_affils, conf_name, year, age_decay=False, age_relev=0.0):
     """
     Parameters
     -----------
@@ -69,10 +70,19 @@ def simple_search(selected_affils, conf_name, year):
     """
     affil_scores = defaultdict()
     pub_records = get_selected_pubs(conf_name, year)
+    current_year = config.PARAMS['current_year']
+    old_year = config.PARAMS['old_year']
 
     for _, record in pub_records.iteritems():
-        score1 = 1.0 / len(record)
-        for _, affil_ids in record.iteritems():
+
+        if age_decay:
+            year = min(max(record['year'], old_year), current_year)
+            weight = np.exp(-(age_relev)*(current_year-year))
+        else:
+            weight = 1.0
+
+        score1 = weight / len(record['author'])
+        for _, affil_ids in record['author'].iteritems():
             score2 = score1 / len(affil_ids)
             for each in affil_ids:
                 try:
@@ -96,14 +106,21 @@ class SimpleSearcher():
     specific conference in specific period of time.
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, **params):
+        self.params = params
 
     def name(self):
         return "SimpleSearcher"
 
-    def search(self, selected_affils, conf_name, year, rtype="affil"):
-        rst = simple_search(selected_affils, conf_name, year)
+    def set_param(self, name, value):
+        self.params[name] = value
+
+    def set_params(self, **params):
+        for k, v in params.items():
+            self.params[k] = v
+
+    def search(self, selected_affils, conf_name, year, age_decay=False, rtype="affil"):
+        rst = simple_search(selected_affils, conf_name, year, age_decay=age_decay, age_relev=self.params['age_relev'])
         return rst
 
 

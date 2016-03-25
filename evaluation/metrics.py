@@ -37,7 +37,8 @@ def ndcg2(actual, pred, relevs=None, k=20):
 	relevs_dict = {actual[i]: relevs[i] for i in xrange(len(actual))}
 
 	r = [relevs_dict[item] if item in relevs_dict else 0.0 for item in pred]
-
+	print "pred dcg"
+	print r
 	ideal_r = sorted([relevs_dict[item] for item in actual], reverse=True)[:k]
 
 	idcg = dcg(ideal_r)
