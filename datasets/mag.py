@@ -943,11 +943,11 @@ def get_selected_pubs(conf_name=None, year=None):
     for paper_id, author_id, affil_id, year in rst:
         if pub_records.has_key(paper_id):
             if pub_records[paper_id]['author'].has_key(author_id):
-                pub_records[paper_id]['author'][author_id].append(affil_id)
+                pub_records[paper_id]['author'][author_id].add(affil_id)
             else:
-                pub_records[paper_id]['author'][author_id] = [affil_id]
+                pub_records[paper_id]['author'][author_id] = set([affil_id])
         else:
-            pub_records[paper_id] = {'author': {author_id: [affil_id]}, 'year':int(year)}
+            pub_records[paper_id] = {'author': {author_id: set([affil_id])}, 'year':int(year)}
 
     return pub_records
 
@@ -1053,12 +1053,16 @@ def retrieve_affils_by_authors(author_id):
                                             # import pdb;pdb.set_trace()
                                             return set()
 
-                    name_of_affil = rst.group(0).replace('-', '').replace('The', '').strip()
+                    name_of_affil = rst.group(0).replace('-', '').replace('The', '').replace('(', '').replace(')', '').strip()
                     match_flag = True
 
                 if match_flag:
                     # print 'univ.'
-                    affil_ids = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil)
+                    try:
+                        affil_ids = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil)
+                    except Exception,e:
+                        print e
+                        import pdb;pdb.set_trace()
                     if affil_ids:
                         # print affil_ids[0]
                         # print name_of_affil # we only keep one and ignore sub-affils
@@ -1079,9 +1083,86 @@ def retrieve_affils_by_authors(author_id):
 
     return match_affil_ids
 
+# helper methods
 
+def import_more_conf_pubs(conf_name):
+    table_description = ['paper_id VARCHAR(30) NOT NULL',
+                        'year SMALLINT',
+                        'conf_id VARCHAR(30) NOT NULL',
+                        'PRIMARY KEY (paper_id)',
+                        'KEY (conf_id)'
+                        ]
+    table_name = 'expanded_conf_papers'
+    db.create_table(table_name, table_description)
+    fields = ['paper_id', 'year', 'conf_id']
+
+    if conf_name == 'SIGIR':
+        from datasets.paper_year_SIGIR import *
+        db.insert(into=table_name, fields=fields, values=pyc, ignore=True)
+
+# for SimpleSearcher
+def get_expand_pubs(conf_id, year):
+    """
+    Get expanded pub records from selected conferences in selected years.
+    """
+
+    # Check parameter types
+    if isinstance(conf_id, basestring):
+        conf_id_str = "('%s')"%str(conf_id)
+
+    elif hasattr(conf_id, '__iter__'): # length of tuple should be larger than 1, otherwise use string
+        conf_id_str = str(tuple(conf_id))
+
+    else:
+        raise TypeError("Parameter 'conf_id' is of unsupported type. String or iterable needed.")
+
+    if isinstance(year, basestring):
+        year_str = "(%s)"%str(year)
+
+    elif hasattr(year, '__iter__'): # length of tuple should be larger than 1, otherwise use string
+        year_str = str(tuple(year))
+
+    else:
+        raise TypeError("Parameter 'year' is of unsupported type. String or iterable needed.")
+
+
+    year_cond = "expanded_conf_papers.year IN %s"%year_str if year else ""
+    conf_id_cond = "expanded_conf_papers.conf_id IN %s"%conf_id_str if conf_id else ""
+
+    if year_cond != '' and conf_id_cond != '':
+        where_cond = '%s AND %s'%(year_cond, conf_id_cond)
+    elif year_cond == '' and conf_id_cond != '':
+        where_cond = conf_id_cond
+    elif year_cond != '' and conf_id_cond == '':
+        where_cond = year_cond
+    else:
+        where_cond = None
+
+    rst = db.select(['expanded_conf_papers.paper_id', 'paper_author_affils.author_id', 'paper_author_affils.affil_id', 'expanded_conf_papers.year'], \
+            ['expanded_conf_papers', 'paper_author_affils'], join_on=['paper_id', 'paper_id'], \
+            where=where_cond)
+
+
+    # re-pack data to this format: {paper_id: {author_id:[affil_id,],},}
+    count = 0
+    author = set()
+    pub_records = defaultdict()
+    for paper_id, author_id, affil_id, year in rst:
+        if affil_id == '' and not author_id in author:
+            count += 1
+        author.add(author_id)
+        if pub_records.has_key(paper_id):
+            if pub_records[paper_id]['author'].has_key(author_id):
+                pub_records[paper_id]['author'][author_id].add(affil_id)
+            else:
+                pub_records[paper_id]['author'][author_id] = set([affil_id])
+        else:
+            pub_records[paper_id] = {'author': {author_id: set([affil_id])}, 'year':int(year)}
+    print "missing author %s/%s"%(count, len(author))
+    return pub_records
 
 if __name__ == '__main__':
     # import_papers(config.DATA + 'Papers/Papers.txt')
-    import_authors('/Volumes/Mixed-Data/data/MAG/Authors/Authors.txt')
+    # import_authors('/Volumes/Mixed-Data/data/MAG/Authors/Authors.txt')
+    import_more_conf_pubs('SIGIR')
     # pass

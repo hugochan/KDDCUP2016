@@ -263,7 +263,9 @@ class ModelBuilder:
     elif expand_method == 'conf':
 
       # Expand the docs by getting more papers from the targeted conference
-      nodes = self.get_expanded_pubs_by_conf(docs, conf_name, [2009, 2010], exclude_list)
+      # nodes = self.get_expanded_pubs_by_conf(docs, conf_name, [2009, 2010], exclude_list)
+
+      nodes = self.get_expanded_pubs_by_conf2(docs, conf_name, range(2006,2011), exclude_list)
       self.edges_lookup = GraphBuilder(get_all_edges(nodes))
 
     else:
@@ -291,6 +293,22 @@ class ModelBuilder:
     nodes = set(docs)
     conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
     expanded_docs = get_conf_docs(conf_id, year)
+    # Remove documents from the exclude list and keep only processed ids
+    expanded_docs = set(expanded_docs) - set(exclude_list)
+
+    nodes.update(expanded_docs)
+
+    return list(nodes)
+
+  def get_expanded_pubs_by_conf2(self, docs, conf_name, year, exclude_list):
+    # Expand the docs by getting more papers from the targeted conference
+    nodes = set(docs)
+    conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
+
+    year_str = ",".join(["'%s'" % y for y in year])
+    expanded_docs = db.select("paper_id", "expanded_conf_papers", where="conf_id='%s' and year IN (%s)"%(conf_id, year_str))
+
+    # import pdb;pdb.set_trace()
     # Remove documents from the exclude list and keep only processed ids
     expanded_docs = set(expanded_docs) - set(exclude_list)
 
@@ -812,7 +830,7 @@ class ModelBuilder:
             # topics, topic_topic_edges, paper_topic_edges,
             # ngrams, ngram_ngram_edges, paper_ngram_edges,
             # venues, pub_venue_edges,
-            affils, author_affil_edges):
+            affils, author_affil_edges, affil_affil_edges):
     """
     Assembles the layers as an unified graph. Each node as an unique id, its type (paper,
     author, etc.) and a readable label (paper title, author name, etc.)
@@ -853,6 +871,7 @@ class ModelBuilder:
     # Add citation edges (directed)
     for paper1, paper2, weight in citation_edges:
       graph.add_edge(pubs_ids[paper1], pubs_ids[paper2], weight=weight)
+      # graph.add_edge(pubs_ids[paper2], pubs_ids[paper1], weight=weight) # try undirected
 
 
     # Add each author providing an unique node id
@@ -931,10 +950,30 @@ class ModelBuilder:
       affils_ids[affil] = next_id
       next_id += 1
 
+    # author_affils_dict = defaultdict()
     for author, affil, weight in author_affil_edges:
       graph.add_edge(authors_ids[author], affils_ids[affil], weight=weight)
       graph.add_edge(affils_ids[affil], authors_ids[author], weight=weight)
+      # try:
+      #   author_affils_dict[author].add(affil)
+      # except:
+      #   author_affils_dict[author] = set([affil])
 
+    # try affil-affil layer
+    # 1)
+    # for affil_1, affil_2, weight in affil_affil_edges:
+    #   graph.add_edge(affils_ids[affil_1], affils_ids[affil_2], weight=weight)
+    #   graph.add_edge(affils_ids[affil_2], affils_ids[affil_1], weight=weight)
+
+    # 2)
+
+    # for author1, author2, weight in coauth_edges:
+    #   if author_affils_dict.has_key(author1) and author_affils_dict.has_key(author2):
+    #     for affil1 in author_affils_dict[author1]:
+    #       for affil2 in author_affils_dict[author2]:
+    #         if affil1 != affil2:
+    #           graph.add_edge(affils_ids[affil1], affils_ids[affil2], weight=weight)
+    #           graph.add_edge(affils_ids[affil2], affils_ids[affil1], weight=weight)
 
     # Get the attributes for each author
     # Get attributes for each paper
@@ -1023,6 +1062,7 @@ class ModelBuilder:
 
     affils = set()
     author_affil_edges = set()
+    affil_affil_edges = set()
     rows = db.select(["paper_id", "author_id", "affil_id"], "paper_author_affils",\
            where="author_id IN (%s) and paper_id IN (%s)"%(author_str, paper_str))
 
@@ -1040,6 +1080,14 @@ class ModelBuilder:
         author_affils[author_id] = set([affil_id])
 
     for author_id, affil_ids in author_affils.iteritems():
+      # add affil-affil edges
+      # for i in range(len(affil_ids)-1):
+      #   if list(affil_ids)[i] != '':
+      #     for j in range(i+1,len(affil_ids)):
+      #       if list(affil_ids)[j] != '':
+      #         affil_affil_edges.add((list(affil_ids)[i], list(affil_ids)[j], 1.0))
+
+
       for each in affil_ids:
         if each != '':
           affils.add(each)
@@ -1094,8 +1142,8 @@ class ModelBuilder:
     #     author_affil_edges.add((author_id, affil_id, 1.0))
 
 
-    print len(affils), len(author_affil_edges)
-    return list(affils), list(author_affil_edges)
+    print len(affils), len(author_affil_edges), len(affil_affil_edges)
+    return list(affils), list(author_affil_edges), list(affil_affil_edges)
 
 
   def build(self, conf_name, year, n_hops, min_topic_lift, min_ngram_lift, exclude=[]):
@@ -1128,7 +1176,7 @@ class ModelBuilder:
     # venues, pub_venue_edges = self.get_venues_layer(pubs)
     # log.debug("%d venues and %d pub-venue edges." % (len(venues), len(pub_venue_edges)))
 
-    affils, author_affil_edges = self.get_affils_layer(authors, pubs)
+    affils, author_affil_edges, get_affils_layer = self.get_affils_layer(authors, pubs)
     log.debug("%d affiliations and %d pub-affil edges." % (len(affils), len(author_affil_edges)))
 
     graph = self.assemble_layers(pubs, citation_edges,
@@ -1137,7 +1185,7 @@ class ModelBuilder:
                    #                                                        topics, topic_topic_edges, pub_topic_edges,
                    # words, word_word_edges, pub_word_edges,
                    # venues, pub_venue_edges,
-                   affils, author_affil_edges)
+                   affils, author_affil_edges, get_affils_layer)
 
     # Writes the contexts of each edge into a file to be used efficiently
     # on the ranking algorithm.

@@ -156,8 +156,8 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
 
                     #             x[n] += params['authors_relev']*(1-alpha)*vv*xlast[kk]
 
-                    x[n]+=danglesum+(1-alpha)*np.array(pers.values()).dot(np.array(xlast.values()))
-                    # x[n]+=danglesum+(1-alpha)*pers[n]
+                    x[n]+=danglesum+(1-alpha)*pers[n]
+                    # x[n]+=danglesum+(1-alpha)*np.array(pers.values()).dot(np.array(xlast.values()))
 #                   l[n][4]+=danglesum+(1.0-alpha)*pers[n]
 
             # normalize vector
@@ -239,7 +239,7 @@ def rank_nodes(graph, papers_relev=0.2,
     # (i,j) is the probability of the random walker to go from layer i to layer j.
     rho = np.array([[rho_papers,     rho_authors,              0],
                 [rho_authors,  1.0-rho_authors-rho_affils,             rho_affils],
-                [         0,       1.0,                 0]])
+                [         0,       1,                 0]])
     # rho = np.array([[rho_papers,     rho_authors,    rho_words,          0],
     #             [rho_authors,  1.0-rho_authors-rho_affils,    0,         rho_affils],
     #             [rho_words,                  0,   1.0-rho_words,              0],

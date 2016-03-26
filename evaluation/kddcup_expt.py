@@ -78,9 +78,9 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     start = time.time()
 
     if searcher.name() == "SimpleSearcher":
-        results = searcher.search(selected_affils, conf_name, year, age_decay=False, rtype="affil")
+        results = searcher.search(selected_affils, conf_name, year, expand_year=range(2005, 2011), age_decay=True, rtype="affil")
     else:
-        results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=False, rtype="affil")
+        results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
 
     metrics["Time"] = time.time() - start
 
@@ -119,8 +119,8 @@ def main():
 
     confs = [
                 "SIGIR", # Phase 1
-                "SIGMOD",
-                "SIGCOMM",
+                # "SIGMOD",
+                # "SIGCOMM",
 
                 # "KDD", # Phase 2
                 # "ICML",
@@ -131,8 +131,8 @@ def main():
             ]
 
     searchers = [
-                    # SimpleSearcher(**config.PARAMS),
-                    Searcher(**config.PARAMS),
+                    SimpleSearcher(**config.PARAMS),
+                    # Searcher(**config.PARAMS),
 
                 ]
 
@@ -155,19 +155,19 @@ def main():
 
             if s.name() == "SimpleSearcher":
                 s.set_params(**{
-                              'age_relev': .5,
+                              'age_relev': .5, # .5, .7, .08
                               })
 
             if s.name() == "MultiLayered":
                 s.set_params(**{
                               'H': 0,
                               # 'age_relev': 0.01, # 0.01
-                              'papers_relev': .8, # .99
-                              'authors_relev': .2, # .01
+                              'papers_relev': .99, # .99
+                              'authors_relev': .01, # .01
                               # 'words_relev': .2,
                               # 'venues_relev' : .2,
-                              'author_affils_relev': .79, # .95
-                              'alpha': 0.25}) # 0.25
+                              'author_affils_relev': .95, # .95, .99, .99
+                              'alpha': 0.01}) # .01, .35, .25
 
             rfile = get_results_file(c, s.name())
             get_search_metrics(selected_affils, ground_truth, c, year, s,\

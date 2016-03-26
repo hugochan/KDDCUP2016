@@ -4,7 +4,7 @@ Created on Mar 14, 2016
 @author: hugo
 '''
 
-from datasets.mag import get_selected_pubs
+from datasets.mag import get_selected_pubs, get_expand_pubs, retrieve_affils_by_authors
 from ranking.kddcup_ranker import rank_nodes
 import kddcup_model
 import utils
@@ -14,8 +14,11 @@ from collections import defaultdict
 import os
 import networkx as nx
 import numpy as np
+from mymysql.mymysql import MyMySQL
 
 builder = None
+db = MyMySQL(db=config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
+
 
 def build_graph(conf_name, year, H, min_topic_lift, min_ngram_lift, exclude=[], force=False, save=True, load=False):
     """
@@ -73,8 +76,9 @@ def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=Fa
 
     # expand docs set by getting more papers accepted by the targeted conference
     if expand_year:
-        expand_recrods = get_expand_pubs(conf_name, year)
-
+        conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
+        expand_recrods = get_expand_pubs(conf_id, expand_year)
+        pub_records.update(expand_recrods)
 
     current_year = config.PARAMS['current_year']
     old_year = config.PARAMS['old_year']
@@ -88,13 +92,24 @@ def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=Fa
             weight = 1.0
 
         score1 = weight / len(record['author'])
-        for _, affil_ids in record['author'].iteritems():
-            score2 = score1 / len(affil_ids)
-            for each in affil_ids:
-                try:
-                    affil_scores[each] += score2
-                except:
-                    affil_scores[each] = score2
+        for author_id, affil_ids in record['author'].iteritems():
+            try:
+                affil_ids.remove('') # remove empty affils
+            except:
+                pass
+
+            if not affil_ids:
+                # retrieve affils based on author id
+
+                affil_ids = retrieve_affils_by_authors(author_id)
+
+            if affil_ids:
+                score2 = score1 / len(affil_ids)
+                for each in affil_ids:
+                    try:
+                        affil_scores[each] += score2
+                    except:
+                        affil_scores[each] = score2
 
     # we only rank the selected affiliations
     if selected_affils:
@@ -125,8 +140,8 @@ class SimpleSearcher():
         for k, v in params.items():
             self.params[k] = v
 
-    def search(self, selected_affils, conf_name, year, age_decay=False, rtype="affil"):
-        rst = simple_search(selected_affils, conf_name, year, age_decay=age_decay, age_relev=self.params['age_relev'])
+    def search(self, selected_affils, conf_name, year, expand_year=[], age_decay=False, rtype="affil"):
+        rst = simple_search(selected_affils, conf_name, year, expand_year=expand_year, age_decay=age_decay, age_relev=self.params['age_relev'])
         return rst
 
 
