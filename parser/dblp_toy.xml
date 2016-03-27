@@ -94,5 +94,12 @@
 <note>Irvine, CA, USA</note>
 </www>
 
-
+    <www key="homepages/c/ChinChenChang">
+<author>Chin-Chen Chang</author>
+<author>Alan Chin-Chen Chang</author>
+<note type="unicode name">&#24373;&#30495;&#35488;</note>
+<note type="affiliation">National Chung Cheng University, Taiwan</note>
+<title>Home Page</title>
+<url>http://www.cs.ccu.edu.tw/~ccc/english/index.html</url>
+</www>
 </dblp>

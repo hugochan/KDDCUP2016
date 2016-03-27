@@ -2,15 +2,19 @@
 Created on Mar 27, 2016
 
 @author: hugo
+An event-driven parser
 '''
 
 import xml.sax
 from mymysql.mymysql import MyMySQL
 import config
-import sys
 import subprocess
+import sys
 
 total_lineno = None
+
+db = MyMySQL(config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
+
 
 class DBLPHandler(xml.sax.ContentHandler):
     def __init__(self, locator):
@@ -22,13 +26,15 @@ class DBLPHandler(xml.sax.ContentHandler):
         self.authors = set()
         self.affils = set()
         self.valid_count = 0 # num of homepage records
-        self.progress = 0
-        self.startDocument()
-        self.file = None
-        self.init()
+        self.author_count = 0 # num of valid (i.e., having affils) authors
+        self.count = 0 # num of tags
 
     # Call when an element starts
     def startElement(self, tag, attr):
+        self.count += 1
+        if self.count % 10000 == 0:
+            print "progress: %.2f %%" % (self.get_progress()*100)
+
         self.CurrentTag = tag
         if tag == "www" and attr.has_key("key") \
                 and "homepages" in attr["key"].split("/"):
@@ -41,9 +47,6 @@ class DBLPHandler(xml.sax.ContentHandler):
             # affiliation
             self.is_affil = True
 
-        if tag in ['article', 'inproceedings', 'proceedings', 'book', 'incollection',
-                'phdthesis', 'mastersthesis', 'www']:
-            self.progress += 1
 
     # Call when an elements ends
     def endElement(self, tag):
@@ -62,11 +65,18 @@ class DBLPHandler(xml.sax.ContentHandler):
                     print "other names: %s" % other_names
                     print "affil names: %s" % affil_names
                     print
+
+                    self.author_count += 1
+                    if self.author_count % 1000 == 0:
+                        print "%s valid authors processed." % self.author_count
+
+
             self.authors.clear()
             self.affils.clear()
 
             if self.valid_count % 1000 == 0:
                 print "%s homepages processed."%self.valid_count
+
 
         elif self.is_affil and tag == "note":
             self.is_affil = False
@@ -81,7 +91,6 @@ class DBLPHandler(xml.sax.ContentHandler):
             # print "URL:", self.url
 
         self.CurrentTag = ""
-        # print "progress: %.2f %%" % (self.get_progress()*100)
 
     # Call when a character is read
     def characters(self, content):
@@ -95,21 +104,9 @@ class DBLPHandler(xml.sax.ContentHandler):
             # self.url = content
 
     def get_progress(self):
+        global total_lineno
         return self.loc.getLineNumber()/float(total_lineno)
 
-    def init(self):
-        print "Initiating..."
-        self.line_count = self.__count_lines()
-        print "%s lines totally." % self.line_count
-
-
-    def __count_lines(self):
-        # Get total line number
-        if self.file != None:
-            for i, l in enumerate(self.file):
-                pass
-            self.file.seek(0)
-            return i + 1
 
 # get total line num of a file
 def file_len(fname):
@@ -128,13 +125,15 @@ if __name__ == "__main__":
         sys.exit()
 
     total_lineno = file_len(in_file)
-    print "total line num of the file: %s" % total_lineno
+    print "total line num of the file: %s\n" % total_lineno
+
     # create an XMLReader
     parser = xml.sax.make_parser()
-    locator = xml.sax.expatreader.ExpatLocator( parser )
+    locator = xml.sax.expatreader.ExpatLocator(parser)
     # turn off namepsaces
     parser.setFeature(xml.sax.handler.feature_namespaces, 0)
     # override the default ContextHandler
     Handler = DBLPHandler(locator)
     parser.setContentHandler(Handler)
     parser.parse(in_file)
+    print "It's done."
