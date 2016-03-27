@@ -70,6 +70,12 @@ def parse(in_file, table_name="dblp_author_affils"):
    print "%d processed." % nauthor_affils
 
 
+# def parse2(path_to_file):
+#    for event, element in etree.iterparse(path_to_file, tag="www"):
+#     for child in element:
+#         print child.tag, child.text
+#     element.clear()
+
 if __name__ == '__main__':
    try:
       in_file = sys.argv[1]
@@ -77,5 +83,6 @@ if __name__ == '__main__':
       print e
       sys.exit()
 
-   parse(in_file)
+   # parse(in_file)
+   parse2(in_file)
 
