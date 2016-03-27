@@ -14,20 +14,29 @@ import sys
 total_lineno = None
 
 db = MyMySQL(config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
-
+auth_affil_bulk = set()
 
 class DBLPHandler(xml.sax.ContentHandler):
-    def __init__(self, locator):
+    def __init__(self, locator, table_name, fields):
         self.loc = locator
         self.setDocumentLocator(self.loc)
         self.CurrentData = ""
-        self.valid = False
-        self.is_affil = False
+        self.valid = False # check if www tag
+        self.is_affil = False # check if valid (having affiliation attr) note tag
         self.authors = set()
         self.affils = set()
+        # self.auth_affil_bulk = set()
         self.valid_count = 0 # num of homepage records
         self.author_count = 0 # num of valid (i.e., having affils) authors
         self.count = 0 # num of tags
+
+
+    # # Weird errors, does not work, so we adopt a stupid way here, set auth_affil_bulk as global
+    # def __del__(self):
+    #     super(xml.sax.ContentHandler, self).__del__()
+    #     if self.auth_affil_bulk:
+    #         db.insert(into=self.table_name, fields=self.fields, values=self.auth_affil_bulk, ignore=True)
+
 
     # Call when an element starts
     def startElement(self, tag, attr):
@@ -54,21 +63,32 @@ class DBLPHandler(xml.sax.ContentHandler):
             self.valid = False # reset flag
             # pack data
             if self.affils:
-                affil_names = list(self.affils)
+                affil_names = self.affils
 
                 if self.authors:
                     author_name = list(self.authors)[0]
                     other_names = list(self.authors)[1:]
 
                     # write to db
-                    print "author name: %s" % author_name
-                    print "other names: %s" % other_names
-                    print "affil names: %s" % affil_names
-                    print
+                    # print "author name: %s" % author_name
+                    # print "other names: %s" % other_names
+                    # print "affil names: %s" % affil_name
+                    # print
+
+                    # one author may have multiple affils, we store all of them
+                    auth_affils = set()
+                    for each in affil_names:
+                        auth_affils.add((author_name, '/'.join([str(x) for x in other_names]), each))
+
+                    auth_affil_bulk.update(auth_affils)
+
+                    if len(auth_affil_bulk) % 500 == 0:
+                        db.insert(into=table_name, fields=fields, values=list(auth_affil_bulk), ignore=True)
+                        auth_affil_bulk.clear()
 
                     self.author_count += 1
                     if self.author_count % 1000 == 0:
-                        print "%s valid authors processed." % self.author_count
+                        print "%s valid (having affils) authors processed." % self.author_count
 
 
             self.authors.clear()
@@ -117,6 +137,7 @@ def file_len(fname):
         raise IOError(err)
     return int(result.strip().split()[0])
 
+
 if __name__ == "__main__":
     try:
         in_file = sys.argv[1]
@@ -127,13 +148,33 @@ if __name__ == "__main__":
     total_lineno = file_len(in_file)
     print "total line num of the file: %s\n" % total_lineno
 
+    # db info
+    table_description = ['id INT NOT NULL AUTO_INCREMENT',
+                        'name VARCHAR(200) NOT NULL',
+                        'other_names VARCHAR(1000)',
+                        'affil_name VARCHAR(200)',
+                        'PRIMARY KEY (id)',
+                        'KEY (name)']
+
+    table_name = "dblp_author_affils"
+    fields = ["name", "other_names", "affil_name"]
+
+    # create table
+    db.create_table(table_name, table_description)
+
+
     # create an XMLReader
     parser = xml.sax.make_parser()
     locator = xml.sax.expatreader.ExpatLocator(parser)
     # turn off namepsaces
     parser.setFeature(xml.sax.handler.feature_namespaces, 0)
     # override the default ContextHandler
-    Handler = DBLPHandler(locator)
+    Handler = DBLPHandler(locator, table_name, fields)
     parser.setContentHandler(Handler)
     parser.parse(in_file)
+
+    # write remaining data into db
+    if auth_affil_bulk:
+        db.insert(into=table_name, fields=fields, values=list(auth_affil_bulk), ignore=True)
+
     print "It's done."
