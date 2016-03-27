@@ -41,7 +41,7 @@ class DBLPHandler(xml.sax.ContentHandler):
     # Call when an element starts
     def startElement(self, tag, attr):
         self.count += 1
-        if self.count % 10000 == 0:
+        if self.count % 1000000 == 0:
             print "progress: %.2f %%" % (self.get_progress()*100)
 
         self.CurrentTag = tag
