@@ -224,7 +224,7 @@ class ModelBuilder:
     # If attributes should be fetched and included in the model for each type of node.
     # Should be true for visualization and false for pure relevance calculation.
     self.include_attributes = include_attributes
-
+    self.pub_years = defaultdict()
 
     # Create a helper boolean to check if citation contexts are
     # going to be used (some datasets don't have it available)
@@ -248,7 +248,10 @@ class ModelBuilder:
     """
 
     # Fetches all document that have at least one of the terms
-    docs = get_selected_docs(conf_name, year)
+    pubs = get_selected_docs(conf_name, year)
+    docs = zip(*pubs)[0]
+    # add year
+    self.pub_years = dict(pubs)
 
     if expand_method == 'n_hops':
 
@@ -263,9 +266,18 @@ class ModelBuilder:
     elif expand_method == 'conf':
 
       # Expand the docs by getting more papers from the targeted conference
-      # nodes = self.get_expanded_pubs_by_conf(docs, conf_name, [2009, 2010], exclude_list)
+      # expanded_pubs = self.get_expanded_pubs_by_conf(conf_name, [2009, 2010])
+      nodes = set(docs)
+      expanded_pubs = self.get_expanded_pubs_by_conf2(conf_name, range(2006, 2011))
 
-      nodes = self.get_expanded_pubs_by_conf2(docs, conf_name, range(2006,2011), exclude_list)
+      # add year
+      for paper, year in expanded_pubs:
+        self.pub_years[paper] = year
+
+      # Remove documents from the exclude list and keep only processed ids
+      expanded_docs = set(zip(*expanded_pubs)[0]) - set(exclude_list)
+      nodes.update(expanded_docs)
+
       self.edges_lookup = GraphBuilder(get_all_edges(nodes))
 
     else:
@@ -288,33 +300,21 @@ class ModelBuilder:
     return nodes, weighted_edges
 
 
-  def get_expanded_pubs_by_conf(self, docs, conf_name, year, exclude_list):
+  def get_expanded_pubs_by_conf(self, conf_name, year):
     # Expand the docs by getting more papers from the targeted conference
-    nodes = set(docs)
     conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
-    expanded_docs = get_conf_docs(conf_id, year)
-    # Remove documents from the exclude list and keep only processed ids
-    expanded_docs = set(expanded_docs) - set(exclude_list)
+    expanded_pubs = get_conf_docs(conf_id, year)
 
-    nodes.update(expanded_docs)
+    return expanded_pubs
 
-    return list(nodes)
-
-  def get_expanded_pubs_by_conf2(self, docs, conf_name, year, exclude_list):
+  def get_expanded_pubs_by_conf2(self, conf_name, year):
     # Expand the docs by getting more papers from the targeted conference
-    nodes = set(docs)
     conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
 
     year_str = ",".join(["'%s'" % y for y in year])
-    expanded_docs = db.select("paper_id", "expanded_conf_papers", where="conf_id='%s' and year IN (%s)"%(conf_id, year_str))
+    expanded_pubs = db.select(["paper_id", "year"], "expanded_conf_papers", where="conf_id='%s' and year IN (%s)"%(conf_id, year_str))
 
-    # import pdb;pdb.set_trace()
-    # Remove documents from the exclude list and keep only processed ids
-    expanded_docs = set(expanded_docs) - set(exclude_list)
-
-    nodes.update(expanded_docs)
-
-    return list(nodes)
+    return expanded_pubs
 
 
   def get_expanded_pubs_by_nhops(self, nodes, edges_lookup, exclude_list, n_hops):
@@ -861,8 +861,8 @@ class ModelBuilder:
 
       graph.add_node(next_id,
                type="paper",
-               entity_id=pub
-               # year=self.pub_years[pub]
+               entity_id=pub,
+               year=self.pub_years[pub]
                )
 
       pubs_ids[pub] = next_id

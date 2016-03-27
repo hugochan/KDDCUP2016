@@ -78,7 +78,7 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     start = time.time()
 
     if searcher.name() == "SimpleSearcher":
-        results = searcher.search(selected_affils, conf_name, year, expand_year=range(2005, 2011), age_decay=True, rtype="affil")
+        results = searcher.search(selected_affils, conf_name, year, expand_year=[], age_decay=True, rtype="affil")
     else:
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
 
@@ -148,26 +148,26 @@ def main():
         #     if v == 0:
         #         count += 1
         # print "%s/%s"%(count, len(ground_truth))
-        exclude_papers = get_selected_docs(c, "2015")
+        exclude_papers = zip(*get_selected_docs(c, "2015"))[0]
 
         for s in searchers :
             print "Running %s." % s.name()
 
             if s.name() == "SimpleSearcher":
                 s.set_params(**{
-                              'age_relev': .5, # .5, .7, .08
+                              'age_relev': .0, # .5, .7, .08
                               })
 
             if s.name() == "MultiLayered":
                 s.set_params(**{
                               'H': 0,
-                              # 'age_relev': 0.01, # 0.01
+                              'age_relev': 0.2, # 0.01
                               'papers_relev': .99, # .99
                               'authors_relev': .01, # .01
                               # 'words_relev': .2,
                               # 'venues_relev' : .2,
-                              'author_affils_relev': .95, # .95, .99, .99
-                              'alpha': 0.01}) # .01, .35, .25
+                              'author_affils_relev': .99, # .95, .99, .99
+                              'alpha': 0.35}) # .01, .35, .25
 
             rfile = get_results_file(c, s.name())
             get_search_metrics(selected_affils, ground_truth, c, year, s,\

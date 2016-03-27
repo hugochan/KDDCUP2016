@@ -809,8 +809,8 @@ def get_selected_docs(conf_name=None, year=None):
         raise TypeError("Parameter 'year' is of unsupported type. String or iterable needed.")
 
 
-    year_cond = "selected_papers.year IN %s"%year_str if year else ""
-    conf_name_cond = "selected_papers.venue_abbr_name IN %s"%conf_name_str if conf_name else ""
+    year_cond = "year IN %s"%year_str if year else ""
+    conf_name_cond = "venue_abbr_name IN %s"%conf_name_str if conf_name else ""
 
     if year_cond != '' and conf_name_cond != '':
         where_cond = '%s AND %s'%(year_cond, conf_name_cond)
@@ -821,7 +821,7 @@ def get_selected_docs(conf_name=None, year=None):
     else:
         where_cond = None
 
-    rst = db.select('id', 'selected_papers', where=where_cond)
+    rst = db.select(['id', 'year'], 'selected_papers', where=where_cond)
 
     return rst
 
@@ -976,6 +976,7 @@ def retrieve_affils_by_authors(author_id):
     college_prog2 = re.compile(college_pattern2)
 
     author_name = db.select("name", "authors", where="id='%s'"%author_id, limit=1)[0].strip('\r\n').strip()
+    print author_name
     affil_names = db.select("affil", "csx_authors", where="name='%s'"%author_name)
 
     match_affil_ids = set()

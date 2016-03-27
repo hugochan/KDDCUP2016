@@ -127,14 +127,14 @@ def main():
 
             if s.name() == "MultiLayered":
                 s.set_params(**{
-                              'H': 0,
+                              'H': 1,
                               # 'age_relev': 0.01, # 0.01
-                              'papers_relev': .99, # .99
-                              'authors_relev': .01, # .01
-                              # 'words_relev': .2,
+                              'papers_relev': .3,
+                              'authors_relev': .4,
+                              'words_relev': .3,
                               # 'venues_relev' : .2,
-                              'author_affils_relev': .95, # .95
-                              'alpha': 0.25}) # 0.25
+                              'author_affils_relev': .6,
+                              'alpha': 0.2}) # 0.1
 
             rfile = get_results_file(c, "results_%s"%s.name())
             rank_affils(selected_affils, c, year, s, results_file=rfile)

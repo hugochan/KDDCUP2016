@@ -17,7 +17,7 @@ import random
 from networkx.classes.digraph import DiGraph
 from networkx.generators.stochastic import stochastic_graph
 import utils
-from config import DATA
+from config import DATA, PARAMS
 import cPickle
 import time
 from networkx.algorithms.centrality.katz import katz_centrality
@@ -274,24 +274,22 @@ def rank_nodes(graph, papers_relev=0.2,
     # Assemble our personalization vector according to similarity to the query provided.
     # Only paper nodes get teleported to, so other layers get 0 as factors.
     # Get year median to replace missing values.
-    # old_year = 1950
-    # current_year = 2016
-    # npapers = 0
-    # years = []
-    # for u in graph.nodes() :
-    #     if is_paper(u) :
-    #         npapers += 1
+    current_year = PARAMS['current_year']
+    old_year = PARAMS['old_year']
+    years = []
+    for u in graph.nodes() :
+        if is_paper(u) :
+            if (graph.node[u]["year"] > 0) :
+                years.append(graph.node[u]["year"])
 
-    #         if (graph.node[u]["year"] > 0) :
-    #             years.append(graph.node[u]["year"])
-
-    # year_median = np.median(years)
+    year_median = np.median(years)
 
     # log.debug("Using year=%d (median) for missing values." % int(year_median))
 
 
     # Normalize weights within each kind of layer transition, e.g., normalize papers to
     # topic edges separately from papers to papers edges.
+    print "age_relev: %s"%age_relev
     for u in graph.nodes() :
 
         weights = defaultdict(float)
@@ -300,14 +298,14 @@ def rank_nodes(graph, papers_relev=0.2,
 
         # Also apply the age attenuator to control relevance of old and highly cited papers
             if is_paper(v) and is_paper(u):
-                # year = graph.node[v]["year"]
-                # if year == 0:
-                #     year = year_median
-                # else:
-                #     year = min(max(year, old_year), current_year)
+                year = graph.node[v]["year"] # year of u or v?
+                if year == 0:
+                    year = year_median
+                else:
+                    year = min(max(year, old_year), current_year)
 
-                weight = 1.0
-                # weight *= np.exp(-(age_relev)*(current_year-year))
+                # weight = 1.0
+                weight = np.exp(-(age_relev)*(current_year-year))
 
                 atts['weight'] = weight
 #               print weight
