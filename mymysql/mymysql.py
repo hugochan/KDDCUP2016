@@ -24,11 +24,12 @@ class MyMySQL():
 															unix_socket="/tmp/mysql.sock", # /var/run/mysqld/mysqld.sock
 															**params)
 
-	def create_table(self, table_name, table_description):
+	def create_table(self, table_name, table_description, force=False):
 		if not isinstance(table_name, str) or not isinstance(table_description, list):
 			raise TypeError("table_name should be a string and table_description should be a list of strings")
 
-		query = "CREATE TABLE IF NOT EXISTS %s (" % table_name
+		query = "CREATE TABLE IF NOT EXISTS %s (" % table_name if not force else \
+					"DROP TABLE IF EXISTS `%s`; CREATE TABLE %s (" % (table_name, table_name)
 		for each in table_description[:-1]:
 			query =  query + each + ','
 		query = query + table_description[-1] + ');'

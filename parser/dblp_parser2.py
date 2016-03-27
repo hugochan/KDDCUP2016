@@ -160,7 +160,7 @@ if __name__ == "__main__":
     fields = ["name", "other_names", "affil_name"]
 
     # create table
-    db.create_table(table_name, table_description)
+    db.create_table(table_name, table_description, force=True)
 
 
     # create an XMLReader
