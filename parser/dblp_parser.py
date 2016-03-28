@@ -5,7 +5,6 @@ Created on Mar 26, 2016
 A DOM-based parser
 '''
 
-from xml.dom.minidom import parse
 import xml.dom.minidom
 from mymysql.mymysql import MyMySQL
 import config

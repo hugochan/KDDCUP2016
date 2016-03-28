@@ -241,7 +241,7 @@ class ModelBuilder:
     return [(u, v, 1.0) for (u, v) in edges]
 
 
-  def get_pubs_layer(self, conf_name, year, n_hops, exclude_list=[], expand_method='n_hops'):
+  def get_pubs_layer(self, conf_name, year, n_hops, exclude_list=[], expand_method='conf'):
     """
     First documents are retrieved from pub records of a targeted conference.
     Then we follow n_hops from these nodes to have the first layer of the graph (papers).
@@ -268,7 +268,7 @@ class ModelBuilder:
       # Expand the docs by getting more papers from the targeted conference
       # expanded_pubs = self.get_expanded_pubs_by_conf(conf_name, [2009, 2010])
       nodes = set(docs)
-      expanded_pubs = self.get_expanded_pubs_by_conf2(conf_name, range(2006, 2011))
+      expanded_pubs = self.get_expanded_pubs_by_conf2(conf_name, range(2005, 2011))
 
       # add year
       for paper, year in expanded_pubs:
@@ -1098,7 +1098,7 @@ class ModelBuilder:
           if len(affil_ids) == 1:
             missing_author += 1
             # we check external data (e.g., csx dataset) and do string matching which is knotty.
-            match_affil_ids = retrieve_affils_by_authors(author_id, table_name='dblp')
+            match_affil_ids, _ = retrieve_affils_by_authors(author_id, table_name='dblp')
             if match_affil_ids:
               hit_count += 1
             for each_affil in match_affil_ids:

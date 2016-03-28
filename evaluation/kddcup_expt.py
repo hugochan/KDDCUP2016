@@ -89,10 +89,10 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     actual, relevs = zip(*ground_truth)
     pred = zip(*results)[0]
 
-    actual_affils = get_affil_based_on_id(actual)
-    ground_5y = simple_search(selected_affils, conf_name, [2011,2012,2013,2014,2015], age_decay=False)
-    ground_5y_affils = get_affil_based_on_id(zip(*ground_5y)[0])
-    import pdb;pdb.set_trace()
+    # actual_affils = get_affil_based_on_id(actual)
+    # ground_5y = simple_search(selected_affils, conf_name, [2011,2012,2013,2014,2015], age_decay=False)
+    # ground_5y_affils = get_affil_based_on_id(zip(*ground_5y)[0])
+    # import pdb;pdb.set_trace()
     # ground_4y = simple_search(selected_affils, conf_name, [2011,2012,2013,2014], age_decay=False)
     # ground_4y_affils = get_affil_based_on_id(zip(*ground_4y)[0])
 
@@ -164,13 +164,13 @@ def main():
             if s.name() == "MultiLayered":
                 s.set_params(**{
                               'H': 0,
-                              'age_relev': 0.2, # 0.01
+                              'age_relev': 0.01, # 0.01
                               'papers_relev': .99, # .99
                               'authors_relev': .01, # .01
                               # 'words_relev': .2,
                               # 'venues_relev' : .2,
-                              'author_affils_relev': .99, # .95, .99, .99
-                              'alpha': 0.35}) # .01, .35, .25
+                              'author_affils_relev': .95, # .95, .99, .99
+                              'alpha': 0.01}) # .01, .35, .25
 
             rfile = get_results_file(c, s.name())
             get_search_metrics(selected_affils, ground_truth, c, year, s,\

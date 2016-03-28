@@ -898,7 +898,7 @@ def get_conf_pubs(conf_id=None, year=None):
             ['papers', 'paper_author_affils'], join_on=['id', 'paper_id'], \
             where=where_cond)
 
-
+    import pdb;pdb.set_trace()
     # re-pack data to this format: {paper_id: {author_id:[affil_id,],},}
     pub_records = defaultdict()
     for paper_id, author_id, affil_id, year in rst:
@@ -963,13 +963,15 @@ def retrieve_affils_by_authors(author_id, table_name='csx'):
     author_name = db.select("name", "authors", where="id='%s'"%author_id, limit=1)[0].strip('\r\n ')
 
     # print author_name
+    dblp_table = 'dblp_paper_author_affils'
+
     if table_name == 'all':
-        affil_names1 = db.select("affil_name", "dblp_author_affils", where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
+        affil_names1 = db.select("affil_name", dblp_table, where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
         affil_names2 = db.select("affil", "csx_paper_author_affils", where="name='%s'"%author_name)
         affil_names1.extend(affil_names2)
         affil_names = affil_names1
     elif table_name == 'dblp':
-        affil_names = db.select("affil_name", "dblp_author_affils", where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
+        affil_names = db.select("affil_name", dblp_table, where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
         if affil_names:
             n_author_recall += 1
             # import pdb;pdb.set_trace()
@@ -980,6 +982,9 @@ def retrieve_affils_by_authors(author_id, table_name='csx'):
     match_affil_ids = set()
 
     # import pdb;pdb.set_trace()
+    # if len(set(affil_names)) > 15:
+        # print author_name
+        # print affil_names
     for each_affil_name in list(set(affil_names))[:1]:
         if not each_affil_name:
             continue
@@ -1072,9 +1077,14 @@ def import_more_conf_pubs(conf_name):
     fields = ['paper_id', 'year', 'conf_id']
 
     if conf_name == 'SIGIR':
-        from datasets.paper_year_SIGIR import pyc
-        db.insert(into=table_name, fields=fields, values=pyc, ignore=True)
-
+        from datasets.paper_year_SIGIR import py_sigir
+        db.insert(into=table_name, fields=fields, values=py_sigir, ignore=True)
+    elif conf_name == 'SIGMOD':
+        from datasets.paper_year_SIGMOD import py_sigmod
+        db.insert(into=table_name, fields=fields, values=py_sigmod, ignore=True)
+    elif conf_name == 'SIGCOMM':
+        from datasets.paper_year_SIGCOMM import py_sigcomm
+        db.insert(into=table_name, fields=fields, values=py_sigcomm, ignore=True)
 
 # for SimpleSearcher
 def get_selected_expand_pubs(conf, year, _type="selected"):
@@ -1214,5 +1224,6 @@ def reg_parse(affil_name):
 if __name__ == '__main__':
     # import_papers(config.DATA + 'Papers/Papers.txt')
     # import_authors('/Volumes/Mixed-Data/data/MAG/Authors/Authors.txt')
-    import_more_conf_pubs('SIGIR')
+    import_more_conf_pubs('SIGCOMM')
+    # get_conf_pubs(conf_id='460A7036', year=range(2000,2011))
     # pass
