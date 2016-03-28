@@ -4,7 +4,7 @@ Created on Mar 14, 2016
 @author: hugo
 '''
 
-from datasets.mag import get_selected_pubs, get_expand_pubs, retrieve_affils_by_authors
+from datasets.mag import get_selected_expand_pubs, retrieve_affils_by_authors
 from ranking.kddcup_ranker import rank_nodes
 import kddcup_model
 import utils
@@ -72,19 +72,19 @@ def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=Fa
             Specifies targeted years
     """
     affil_scores = defaultdict()
-    pub_records = get_selected_pubs(conf_name, year)
+    pub_records = get_selected_expand_pubs(conf_name, year, _type='selected')
 
     # expand docs set by getting more papers accepted by the targeted conference
     if expand_year:
         conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
-        expand_recrods = get_expand_pubs(conf_id, expand_year)
+        expand_recrods = get_selected_expand_pubs(conf_id, expand_year, _type='expanded')
         pub_records.update(expand_recrods)
+        print 'expanded %s papers.'%len(expand_recrods)
 
     current_year = config.PARAMS['current_year']
     old_year = config.PARAMS['old_year']
 
     for _, record in pub_records.iteritems():
-
         if age_decay:
             pub_year = min(max(record['year'], old_year), current_year)
             weight = np.exp(-(age_relev)*(current_year-pub_year))
@@ -93,16 +93,6 @@ def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=Fa
 
         score1 = weight / len(record['author'])
         for author_id, affil_ids in record['author'].iteritems():
-            try:
-                affil_ids.remove('') # remove empty affils
-            except:
-                pass
-
-            if not affil_ids:
-                # retrieve affils based on author id
-
-                affil_ids = retrieve_affils_by_authors(author_id)
-
             if affil_ids:
                 score2 = score1 / len(affil_ids)
                 for each in affil_ids:

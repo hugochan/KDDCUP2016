@@ -78,7 +78,9 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     start = time.time()
 
     if searcher.name() == "SimpleSearcher":
-        results = searcher.search(selected_affils, conf_name, year, expand_year=[], age_decay=True, rtype="affil")
+        # expand_year = []
+        expand_year = range(2005, 2011)
+        results = searcher.search(selected_affils, conf_name, year, expand_year=expand_year, age_decay=True, rtype="affil")
     else:
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
 
@@ -155,7 +157,7 @@ def main():
 
             if s.name() == "SimpleSearcher":
                 s.set_params(**{
-                              'age_relev': .0, # .5, .7, .08
+                              'age_relev': .5, # .5, .7, .08
                               })
 
             if s.name() == "MultiLayered":

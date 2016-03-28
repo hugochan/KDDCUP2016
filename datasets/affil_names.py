@@ -46,4 +46,8 @@ affil_univs = {'mit':'Massachusetts Institute of Technology', 'cmu':'Carnegie Me
         'los alamos national':'Los Alamos National Laboratory',
         'dso national':'DSO National Laboratories',
         'ntt communication':'NTT Communications',
-        'ict':'ict'}
+        'ict':'ict', 'irit':'Institut de Recherche en Informatique de Toulouse',
+        'cselt':'Centro Studi e Laboratori Telecomunicazioni',
+        'cea':'French Alternative Energies and Atomic Energy Commission'}
+
+special_transform = {'universidade federal do amazonas':'Federal University of Amazonas'}

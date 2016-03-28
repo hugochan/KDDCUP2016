@@ -1098,7 +1098,7 @@ class ModelBuilder:
           if len(affil_ids) == 1:
             missing_author += 1
             # we check external data (e.g., csx dataset) and do string matching which is knotty.
-            match_affil_ids = retrieve_affils_by_authors(author_id)
+            match_affil_ids = retrieve_affils_by_authors(author_id, table_name='dblp')
             if match_affil_ids:
               hit_count += 1
             for each_affil in match_affil_ids:

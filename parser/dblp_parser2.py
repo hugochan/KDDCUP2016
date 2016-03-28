@@ -10,6 +10,7 @@ from mymysql.mymysql import MyMySQL
 import config
 import subprocess
 import sys
+import re
 
 total_lineno = None
 
@@ -67,8 +68,8 @@ class DBLPHandler(xml.sax.ContentHandler):
 
                 if self.authors:
                     author_name = list(self.authors)[0]
+                    author_name = re.sub(" \d+", " ", author_name) # remove digits at the end of the string
                     other_names = list(self.authors)[1:]
-
                     # write to db
                     # print "author name: %s" % author_name
                     # print "other names: %s" % other_names
@@ -78,7 +79,7 @@ class DBLPHandler(xml.sax.ContentHandler):
                     # one author may have multiple affils, we store all of them
                     auth_affils = set()
                     for each in affil_names:
-                        auth_affils.add((author_name, '/'.join([str(x) for x in other_names]), each))
+                        auth_affils.add((author_name, '/'.join(x for x in other_names]), each))
 
                     auth_affil_bulk.update(auth_affils)
 

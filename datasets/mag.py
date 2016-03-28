@@ -16,6 +16,27 @@ from datasets.affil_names import *
 
 db = MyMySQL(config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
 
+
+# regexp patterns
+univ_academy_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(University|Universidade|Academy|Council)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
+institute_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(Institute)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
+college_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(College|Centre|Center)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
+
+univ_academy_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(University|Universidade|Academy|Council)[^,;:.\\d]*$'
+institute_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(Institute)[^,;:.\\d]*$'
+college_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(College|Centre|Center)[^,;:.\\d]*$'
+
+
+univ_academy_prog = re.compile(univ_academy_pattern)
+institute_prog = re.compile(institute_pattern)
+college_prog = re.compile(college_pattern)
+
+univ_academy_prog2 = re.compile(univ_academy_pattern2)
+institute_prog2 = re.compile(institute_pattern2)
+college_prog2 = re.compile(college_pattern2)
+
+
+
 def import_selected_affils(file_path, table_name='selected_affils'):
     table_description = ['id VARCHAR(30) NOT NULL',
                         'name VARCHAR(200) NOT NULL',
@@ -881,10 +902,6 @@ def get_conf_pubs(conf_id=None, year=None):
     # re-pack data to this format: {paper_id: {author_id:[affil_id,],},}
     pub_records = defaultdict()
     for paper_id, author_id, affil_id, year in rst:
-
-
-
-
         if pub_records.has_key(paper_id):
             if pub_records[paper_id]['author'].has_key(author_id):
                 pub_records[paper_id]['author'][author_id].append(affil_id)
@@ -896,193 +913,150 @@ def get_conf_pubs(conf_id=None, year=None):
     return pub_records
 
 
-def get_selected_pubs(conf_name=None, year=None):
+
+def retrieve_affils_by_author_papers(author_id, paper_id, table_name='csx'):
+    try:
+        author_name = db.select("name", "authors", where="id='%s'"%author_id, limit=1)[0].strip('\r\n ')
+
+        paper_table = "selected_papers" # temporary setting, to be improved
+        paper_title = db.select("title", paper_table, where="id='%s'"%paper_id, limit=1)[0].strip('\r\n ')
+
+        if not author_name or not paper_title:
+            return []
+
+        # transfer to the external paper id
+        transfered_paper_id = db.select("id", "%s_papers"%table_name, \
+                where="title REGEXP '[[:<:]]%s[[:>:]]'"%paper_title, limit=1)
+
+        if not transfered_paper_id:
+            return []
+        print "transfer paper_id: %s"%transfered_paper_id[0]
+
+        affil_names = db.select("affil", "%s_paper_author_affils"%table_name, \
+                where="paperid='%s' AND name='%s'"%(transfered_paper_id[0], author_name))
+
+        if not affil_names:
+            return []
+
+        affil_ids = set()
+        for each_affil_name in affil_names:
+            import pdb;pdb.set_trace()
+            name_of_affil = reg_parse(each_affil_name)
+            if name_of_affil:
+                affil = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil, limit=1)
+                if affil:
+                    affil_ids.add(affil[0])
+        return list(affil_ids)
+
+    except Exception, e:
+        print e
+        import pdb;pdb.set_trace()
+        return []
+
+
+def retrieve_affils_by_authors(author_id, table_name='csx'):
     """
-    Get pub records from selected conferences in selected years.
+    we check csx_paper_author_affils table and do string matching which is knotty.
     """
 
-    # Check parameter types
-    if isinstance(conf_name, basestring):
-        conf_name_str = "('%s')"%str(conf_name)
+    n_author_recall = 0
+    author_name = db.select("name", "authors", where="id='%s'"%author_id, limit=1)[0].strip('\r\n ')
 
-    elif hasattr(conf_name, '__iter__'): # length of tuple should be larger than 1, otherwise use string
-        conf_name_str = str(tuple(conf_name))
-
+    # print author_name
+    if table_name == 'all':
+        affil_names1 = db.select("affil_name", "dblp_author_affils", where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
+        affil_names2 = db.select("affil", "csx_paper_author_affils", where="name='%s'"%author_name)
+        affil_names1.extend(affil_names2)
+        affil_names = affil_names1
+    elif table_name == 'dblp':
+        affil_names = db.select("affil_name", "dblp_author_affils", where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
+        if affil_names:
+            n_author_recall += 1
+            # import pdb;pdb.set_trace()
+    elif table_name == 'csx':
+        affil_names = db.select("affil", "csx_paper_author_affils", where="name='%s'"%author_name)
     else:
-        raise TypeError("Parameter 'conf_name' is of unsupported type. String or iterable needed.")
-
-    if isinstance(year, basestring):
-        year_str = "(%s)"%str(year)
-
-    elif hasattr(year, '__iter__'): # length of tuple should be larger than 1, otherwise use string
-        year_str = str(tuple(year))
-
-    else:
-        raise TypeError("Parameter 'year' is of unsupported type. String or iterable needed.")
-
-
-    year_cond = "selected_papers.year IN %s"%year_str if year else ""
-    conf_name_cond = "selected_papers.venue_abbr_name IN %s"%conf_name_str if conf_name else ""
-
-    if year_cond != '' and conf_name_cond != '':
-        where_cond = '%s AND %s'%(year_cond, conf_name_cond)
-    elif year_cond == '' and conf_name_cond != '':
-        where_cond = conf_name_cond
-    elif year_cond != '' and conf_name_cond == '':
-        where_cond = year_cond
-    else:
-        where_cond = None
-
-    rst = db.select(['selected_papers.id', 'paper_author_affils.author_id', 'paper_author_affils.affil_id', 'selected_papers.year'], \
-            ['selected_papers', 'paper_author_affils'], join_on=['id', 'paper_id'], \
-            where=where_cond)
-
-
-    # re-pack data to this format: {paper_id: {author_id:[affil_id,],},}
-    pub_records = defaultdict()
-    for paper_id, author_id, affil_id, year in rst:
-        if pub_records.has_key(paper_id):
-            if pub_records[paper_id]['author'].has_key(author_id):
-                pub_records[paper_id]['author'][author_id].add(affil_id)
-            else:
-                pub_records[paper_id]['author'][author_id] = set([affil_id])
-        else:
-            pub_records[paper_id] = {'author': {author_id: set([affil_id])}, 'year':int(year)}
-
-    return pub_records
-
-
-def retrieve_affils_by_authors(author_id):
-    """
-    we check csx_authors table and do string matching which is knotty.
-    """
-
-    # regexp patterns
-    univ_academy_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(University|Academy)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
-    institute_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(Institute)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
-    college_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(College)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
-
-    univ_academy_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(University|Academy)[^,;:.\\d]*$'
-    institute_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(Institute)[^,;:.\\d]*$'
-    college_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(College)[^,;:.\\d]*$'
-
-
-    univ_academy_prog = re.compile(univ_academy_pattern)
-    institute_prog = re.compile(institute_pattern)
-    college_prog = re.compile(college_pattern)
-
-    univ_academy_prog2 = re.compile(univ_academy_pattern2)
-    institute_prog2 = re.compile(institute_pattern2)
-    college_prog2 = re.compile(college_pattern2)
-
-    author_name = db.select("name", "authors", where="id='%s'"%author_id, limit=1)[0].strip('\r\n').strip()
-    print author_name
-    affil_names = db.select("affil", "csx_authors", where="name='%s'"%author_name)
-
+        raise ValueError("Unknown table_name. Parameter table_name must be either 'csx' or 'dblp'.")
     match_affil_ids = set()
-    if affil_names:
-        # for each in set(affil_names):
-        # print affil_names[0]
-        # print '\r\n'
-        if affil_names[0]: # not None or empty string
 
-            affil_tokens = affil_names[0].lower().replace(",", " ").replace(";", " ").replace(".", " ").replace("-", " ").split()
+    # import pdb;pdb.set_trace()
+    for each_affil_name in list(set(affil_names))[:1]:
+        if not each_affil_name:
+            continue
 
-            match_flag = False
+        affil_tokens = each_affil_name.lower().replace(",", " ").replace(";", " ").replace(".", " ").replace("-", " ").split()
 
-            # import pdb;pdb.set_trace()
-            # check if it's a company
-            for com in affil_companies:
-                if isinstance(com, str):
-                    if com in affil_tokens:
-                        name_of_affil = com
-                        match_flag = True
-                        break
-                else:
-                    flag = True
-                    for each in com:
-                        if not each in affil_tokens:
-                            flag = False
-                            break
-                    if flag:
-                        name_of_affil = ' '.join(com)
-                        match_flag = True
-                        break
+        match_flag = False
 
-            if match_flag: # match a company
-                # print 'company'
-                affil_ids = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil)
-                if affil_ids:
-                    # print affil_ids[0]
-                    # print name_of_affil # we only keep one and ignore sub-affils
-                    # print
-                    match_affil_ids.add(affil_ids[0])
-            else:
-                # check if it's an academic institute
-
-                # 1) first, check abbr.
-                for abbr, univ in affil_univs.iteritems():
-                    abbr_l = abbr.split()
-                    flag = True
-                    for each in abbr_l:
-                        if not each in affil_tokens:
-                            flag = False
-                            break
-                    if flag:
-                        name_of_affil = univ
-                        match_flag = True
-                        break
-
-                if not match_flag:
-                    # 2) then, check full name
-                    normal_affil_name = affil_names[0].title().replace('Univ.', 'University').replace('Umversity', 'University') # low-prob case
-
-                    # try matching university and academy
-                    rst = univ_academy_prog.search(normal_affil_name)
-                    if not rst:
-                        rst = institute_prog.search(normal_affil_name)
-                        if not rst:
-                            rst = college_prog.search(normal_affil_name)
-                            if not rst:
-                                rst = univ_academy_prog2.search(normal_affil_name)
-                                if not rst:
-                                    rst = institute_prog2.search(normal_affil_name)
-                                    if not rst:
-                                        rst = college_prog2.search(normal_affil_name)
-                                        if not rst:
-                                            # print affil_names[0]
-                                            # import pdb;pdb.set_trace()
-                                            return set()
-
-                    name_of_affil = rst.group(0).replace('-', '').replace('The', '').replace('(', '').replace(')', '').strip()
-                    match_flag = True
-
-                if match_flag:
-                    # print 'univ.'
-                    try:
-                        affil_ids = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil)
-                    except Exception,e:
-                        print e
-                        import pdb;pdb.set_trace()
-                    if affil_ids:
-                        # print affil_ids[0]
-                        # print name_of_affil # we only keep one and ignore sub-affils
-                        # print
-
-                        match_affil_ids.add(affil_ids[0])
-                else:
-                    # print 'yes name, no id'
-                    # import pdb;pdb.set_trace()
-                    pass
-        else:
-            # print 'no name'
-            # import pdb;pdb.set_trace()
-            pass
-    else:
         # import pdb;pdb.set_trace()
-        pass
+        # check if it's a company
+        for com in affil_companies:
+            if isinstance(com, str):
+                if com in affil_tokens:
+                    name_of_affil = com
+                    match_flag = True
+                    break
+            else:
+                flag = True
+                for each in com:
+                    if not each in affil_tokens:
+                        flag = False
+                        break
+                if flag:
+                    name_of_affil = ' '.join(com)
+                    match_flag = True
+                    break
 
-    return match_affil_ids
+        if match_flag: # match a company
+            # print 'company'
+            affil_ids = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil)
+
+            match_affil_ids.update(set(affil_ids))
+        else:
+            # check if it's an academic institute
+
+            # 1) first, check abbr.
+            for abbr, univ in affil_univs.iteritems():
+                abbr_l = abbr.split()
+                flag = True
+                for each in abbr_l:
+                    if not each in affil_tokens:
+                        flag = False
+                        break
+                if flag:
+                    name_of_affil = univ
+                    match_flag = True
+                    break
+
+            if not match_flag:
+                # 2) then, check full name
+                name_of_affil = reg_parse(each_affil_name) # parse affil names
+                if not name_of_affil:
+                    # if n_author_recall > 0:
+                        # print name_of_affil
+                        # import pdb;pdb.set_trace()
+                    continue
+
+                match_flag = True
+
+            if match_flag:
+                # print 'univ.'
+                # special transform
+                if special_transform.has_key(name_of_affil):
+                    name_of_affil = special_transform[name_of_affil]
+
+                try:
+                    affil_ids = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil)
+                except Exception,e:
+                    print e
+                if affil_ids:
+                    match_affil_ids.update(set(affil_ids))
+            else:
+                # print 'yes name, no id'
+                # import pdb;pdb.set_trace()
+                pass
+    # print "n_author_recall: %s"%n_author_recall
+    return match_affil_ids, n_author_recall
 
 # helper methods
 
@@ -1098,21 +1072,22 @@ def import_more_conf_pubs(conf_name):
     fields = ['paper_id', 'year', 'conf_id']
 
     if conf_name == 'SIGIR':
-        from datasets.paper_year_SIGIR import *
+        from datasets.paper_year_SIGIR import pyc
         db.insert(into=table_name, fields=fields, values=pyc, ignore=True)
 
+
 # for SimpleSearcher
-def get_expand_pubs(conf_id, year):
+def get_selected_expand_pubs(conf, year, _type="selected"):
     """
     Get expanded pub records from selected conferences in selected years.
     """
 
     # Check parameter types
-    if isinstance(conf_id, basestring):
-        conf_id_str = "('%s')"%str(conf_id)
+    if isinstance(conf, basestring):
+        conf_str = "('%s')"%str(conf)
 
-    elif hasattr(conf_id, '__iter__'): # length of tuple should be larger than 1, otherwise use string
-        conf_id_str = str(tuple(conf_id))
+    elif hasattr(conf, '__iter__'): # length of tuple should be larger than 1, otherwise use string
+        conf_str = str(tuple(conf))
 
     else:
         raise TypeError("Parameter 'conf_id' is of unsupported type. String or iterable needed.")
@@ -1126,41 +1101,115 @@ def get_expand_pubs(conf_id, year):
     else:
         raise TypeError("Parameter 'year' is of unsupported type. String or iterable needed.")
 
+    if _type == 'selected':
+        table_name = "%s_papers" % _type
+        col_id_name = "id"
+        conf_cond = "%s.venue_abbr_name IN %s"%(table_name, conf_str) if conf_str else ""
 
-    year_cond = "expanded_conf_papers.year IN %s"%year_str if year else ""
-    conf_id_cond = "expanded_conf_papers.conf_id IN %s"%conf_id_str if conf_id else ""
+    elif _type == 'expanded':
+        table_name = "%s_conf_papers" % _type
+        col_id_name = "paper_id"
+        conf_cond = "%s.conf_id IN %s"%(table_name, conf_str) if conf_str else ""
 
-    if year_cond != '' and conf_id_cond != '':
-        where_cond = '%s AND %s'%(year_cond, conf_id_cond)
-    elif year_cond == '' and conf_id_cond != '':
-        where_cond = conf_id_cond
-    elif year_cond != '' and conf_id_cond == '':
+    else:
+        raise ValueError("Unknown parameter type. parameter type should either be 'selected' or 'expanded'")
+
+    year_cond = "%s.year IN %s"%(table_name, year_str) if year else ""
+
+    if year_cond != '' and conf_cond != '':
+        where_cond = '%s AND %s'%(year_cond, conf_cond)
+    elif year_cond == '' and conf_cond != '':
+        where_cond = conf_cond
+    elif year_cond != '' and conf_cond == '':
         where_cond = year_cond
     else:
         where_cond = None
 
-    rst = db.select(['expanded_conf_papers.paper_id', 'paper_author_affils.author_id', 'paper_author_affils.affil_id', 'expanded_conf_papers.year'], \
-            ['expanded_conf_papers', 'paper_author_affils'], join_on=['paper_id', 'paper_id'], \
+    rst = db.select(['%s.%s'%(table_name, col_id_name), 'paper_author_affils.author_id', 'paper_author_affils.affil_id', '%s.year'%table_name], \
+            [table_name, 'paper_author_affils'], join_on=[col_id_name, 'paper_id'], \
             where=where_cond)
 
 
     # re-pack data to this format: {paper_id: {author_id:[affil_id,],},}
     count = 0
+    get_affil_count = 0
     author = set()
+    retrieved_paper_authors = set()
     pub_records = defaultdict()
     for paper_id, author_id, affil_id, year in rst:
         if affil_id == '' and not author_id in author:
             count += 1
+            author.add(author_id)
+        if not affil_id:
+            if not (paper_id, author_id) in retrieved_paper_authors:
+                # print "author id: %s"%author_id
+                # print "paper id: %s"%paper_id
+                # import pdb;pdb.set_trace()
+                # retrieved_affil_ids = None # turn off
+                retrieved_affil_ids, flag = retrieve_affils_by_authors(author_id, table_name='dblp')
+                if flag == 1:
+                    get_affil_count += 1
+                # retrieved_affil_ids = retrieve_affils_by_author_papers(author_id, paper_id, table_name='csx')
+                if retrieved_affil_ids:
+                    retrieved_paper_authors.add((paper_id, author_id))
+                    # print "retrieved", (paper_id, author_id, retrieved_affil_ids)
+                    #############
+                    # update db
+                    #############
+                    # to do
+
+                    affil_id = set(retrieved_affil_ids)
+                else:
+                    # skip this record
+                    continue
+            else:
+                continue
+
+            # continue
+
+        else:
+            affil_id = set([affil_id])
+
         author.add(author_id)
         if pub_records.has_key(paper_id):
             if pub_records[paper_id]['author'].has_key(author_id):
-                pub_records[paper_id]['author'][author_id].add(affil_id)
+                pub_records[paper_id]['author'][author_id].update(affil_id)
             else:
-                pub_records[paper_id]['author'][author_id] = set([affil_id])
+                pub_records[paper_id]['author'][author_id] = affil_id
         else:
-            pub_records[paper_id] = {'author': {author_id: set([affil_id])}, 'year':int(year)}
-    print "missing author %s/%s"%(count, len(author))
+            pub_records[paper_id] = {'author': {author_id: affil_id}, 'year':int(year)}
+    print "missing author: %s/%s"%(count, len(author))
+    print "get_affil_count: %s"%get_affil_count
     return pub_records
+
+
+def reg_parse(affil_name):
+    normal_affil_name = affil_name.title().replace('Univ.', 'University')\
+                .replace('Umversity', 'University').replace('Universit', 'University')\
+                .replace('Universityy', 'University') # low-prob case
+
+    # try matching university and academy
+    rst = univ_academy_prog.search(normal_affil_name)
+    if not rst:
+        rst = institute_prog.search(normal_affil_name)
+        if not rst:
+            rst = college_prog.search(normal_affil_name)
+            if not rst:
+                rst = univ_academy_prog2.search(normal_affil_name)
+                if not rst:
+                    rst = institute_prog2.search(normal_affil_name)
+                    if not rst:
+                        rst = college_prog2.search(normal_affil_name)
+                        if not rst:
+                            # print each_affil_name
+                            # import pdb;pdb.set_trace()
+                            return
+
+    name_of_affil = rst.group(0).replace('-', '').replace('The', '')\
+                            .replace('(', '').replace(')', '').strip()
+    return name_of_affil
+
+
 
 if __name__ == '__main__':
     # import_papers(config.DATA + 'Papers/Papers.txt')
