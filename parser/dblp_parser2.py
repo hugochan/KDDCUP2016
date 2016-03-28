@@ -7,6 +7,7 @@ An event-driven parser
 
 import xml.sax
 from mymysql.mymysql import MyMySQL
+from datasets.affil_names import url_keywords
 import config
 import subprocess
 import sys
@@ -17,6 +18,13 @@ total_lineno = None
 db = MyMySQL(config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
 auth_affil_bulk = set()
 
+
+# url_pattern = '(www\d*)([.a-z^/][^/]+[.a-z^/])?'
+url_pattern = '^(http[s]*://)([.a-z^/][^/]+[.a-z^/])?'
+url_prog = re.compile(url_pattern)
+
+
+
 class DBLPHandler(xml.sax.ContentHandler):
     def __init__(self, locator, table_name, fields):
         self.loc = locator
@@ -24,6 +32,7 @@ class DBLPHandler(xml.sax.ContentHandler):
         self.CurrentData = ""
         self.valid = False # check if www tag
         self.is_affil = False # check if valid (having affiliation attr) note tag
+        self.url = "" # we use urls to retrieve affiliations
         self.authors = set()
         self.affils = set()
         # self.auth_affil_bulk = set()
@@ -58,11 +67,20 @@ class DBLPHandler(xml.sax.ContentHandler):
             self.is_affil = True
 
 
+
     # Call when an elements ends
     def endElement(self, tag):
         if self.valid and tag == "www":
+
             self.valid = False # reset flag
+
             # pack data
+            if not self.affils and self.url: # retrieve affils based on urls
+                self.affils = retrieve_affils_by_urls(self.url)
+                if not self.affils:
+                    print self.url#, self.affils
+
+
             if self.affils:
                 affil_names = self.affils
 
@@ -79,7 +97,7 @@ class DBLPHandler(xml.sax.ContentHandler):
                     # one author may have multiple affils, we store all of them
                     auth_affils = set()
                     for each in affil_names:
-                        auth_affils.add((author_name, '/'.join(x for x in other_names]), each))
+                        auth_affils.add((author_name, '/'.join([x for x in other_names]), each))
 
                     auth_affil_bulk.update(auth_affils)
 
@@ -92,8 +110,11 @@ class DBLPHandler(xml.sax.ContentHandler):
                         print "%s valid (having affils) authors processed." % self.author_count
 
 
-            self.authors.clear()
-            self.affils.clear()
+            if self.authors:
+                self.authors.clear()
+            if self.affils:
+                self.affils.clear()
+            self.url = ""
 
             if self.valid_count % 1000 == 0:
                 print "%s homepages processed."%self.valid_count
@@ -117,12 +138,14 @@ class DBLPHandler(xml.sax.ContentHandler):
     def characters(self, content):
         if self.valid and self.CurrentTag == "author":
             self.authors.add(content.strip('\r\n').strip())
-        if self.is_affil and self.CurrentTag == "note":
+
+        elif self.is_affil and self.CurrentTag == "note":
             self.affils.add(content.strip('\r\n').strip())
-        # elif self.CurrentTag == "title":
+
+        elif self.valid and self.CurrentTag == "url":
+            self.url = content.strip()
+        # elif self.valid and self.CurrentTag == "title":
             # self.title = content
-        # elif self.CurrentTag == "url":
-            # self.url = content
 
     def get_progress(self):
         global total_lineno
@@ -137,6 +160,18 @@ def file_len(fname):
     if p.returncode != 0:
         raise IOError(err)
     return int(result.strip().split()[0])
+
+
+def retrieve_affils_by_urls(url):
+    rst = url_prog.search(url)
+    if rst:
+        url_tokens = rst.group(0).replace('/', '.').split('.')
+        for k, v in url_keywords.iteritems():
+            if k in url_tokens:
+                return set([v])
+
+    return set()
+
 
 
 if __name__ == "__main__":
@@ -157,7 +192,7 @@ if __name__ == "__main__":
                         'PRIMARY KEY (id)',
                         'KEY (name)']
 
-    table_name = "dblp_author_affils"
+    table_name = "dblp_paper_author_affils"
     fields = ["name", "other_names", "affil_name"]
 
     # create table
@@ -177,5 +212,5 @@ if __name__ == "__main__":
     # write remaining data into db
     if auth_affil_bulk:
         db.insert(into=table_name, fields=fields, values=list(auth_affil_bulk), ignore=True)
-
+        # pass
     print "It's done."
