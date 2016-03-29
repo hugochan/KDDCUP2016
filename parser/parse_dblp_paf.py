@@ -13,7 +13,10 @@ from datasets.affil_names import url_keywords
 import config
 import subprocess
 import sys
-import re
+import re, time
+
+
+start_author = 0
 
 total_lineno = None
 BASE_URL = 'http://dblp.uni-trier.de/'
@@ -50,7 +53,7 @@ class DBLPHandler(xml.sax.ContentHandler):
         self.valid_count = 0 # num of homepage records
         self.author_count = 0 # num of valid (i.e., having affils) authors
         self.count = 0 # num of tags
-
+        self.nrows_auth_affil = 0
     # # Weird errors, does not work, so we adopt a stupid way here, set auth_affil_bulk as global
     # def __del__(self):
     #     super(xml.sax.ContentHandler, self).__del__()
@@ -76,9 +79,7 @@ class DBLPHandler(xml.sax.ContentHandler):
                 and attr["type"] == "affiliation":
             # affiliation
             self.is_affil = True
-        if tag == 'dblpperson':
-            print attr
-            import pdb;pdb.set_trace()
+
         # alltags.add(tag)
 
 
@@ -102,7 +103,9 @@ class DBLPHandler(xml.sax.ContentHandler):
                     # import pdb;pdb.set_trace()
 
                     author_name = self.authors[0]
-                    pubs = get_pubs_by_authors(author_name, self.dblp_key) # passes author_name before cleanning it
+                    pubs = set()
+                    if self.nrows_auth_affil >= start_author:
+                        pubs = get_pubs_by_authors(author_name, self.dblp_key) # passes author_name before cleanning it
                     author_name = re.sub(" \d+", " ", author_name) # remove digits at the end of the string
                     other_names = self.authors[1:]
                     # write to db
@@ -119,8 +122,9 @@ class DBLPHandler(xml.sax.ContentHandler):
                     auth_pub_bulk.update(auth_pubs)
 
                     if len(auth_affil_bulk) % 500 == 0:
-                        db.insert(into=self.table_auth_pub, fields=self.fields_auth_pub, values=list(auth_pub_bulk), ignore=True)
-                        auth_affil_bulk.clear()
+                        if self.nrows_auth_affil >= start_author:
+                            db.insert(into=self.table_auth_pub, fields=self.fields_auth_pub, values=list(auth_pub_bulk), ignore=True)
+                        auth_pub_bulk.clear()
 
 
 
@@ -133,8 +137,10 @@ class DBLPHandler(xml.sax.ContentHandler):
 
                     # table_auth_affil, fields_auth_affil, table_auth_pub, fields_auth_pub
                     if len(auth_affil_bulk) % 500 == 0:
-                        db.insert(into=self.table_auth_affil, fields=self.fields_auth_affil, values=list(auth_affil_bulk), ignore=True)
+                        if self.nrows_auth_affil >= start_author:
+                            db.insert(into=self.table_auth_affil, fields=self.fields_auth_affil, values=list(auth_affil_bulk), ignore=True)
                         auth_affil_bulk.clear()
+                        self.nrows_auth_affil += 500
 
                     self.author_count += 1
                     if self.author_count % 1000 == 0:
@@ -264,6 +270,19 @@ def get_pubs_by_authors(author_name, dblp_key):
             return set()
 
         dblp.getElementsByTagName("r")
+    elif resp.status_code == 429:
+        # Too Many Requests
+        try:
+            print resp.headers
+            twait = resp.headers["Retry-After"]
+        except Exception, e:
+            print e
+            twait = 30 # default
+        time.sleep(twait)
+        # import pdb;pdb.set_trace()
+        print 'wait %s seconds. Retry...' % twait
+        return get_pubs_by_authors(author_name, dblp_key)
+
     else:
         print "failed to find author: %s, dblp_key: %s" % (author_name, dblp_key)
         # import pdb;pdb.set_trace()

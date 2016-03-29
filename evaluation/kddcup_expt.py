@@ -78,8 +78,8 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     start = time.time()
 
     if searcher.name() == "SimpleSearcher":
-        # expand_year = []
-        expand_year = range(2005, 2011)
+        expand_year = []
+        # expand_year = range(2005, 2011)
         results = searcher.search(selected_affils, conf_name, year, expand_year=expand_year, age_decay=True, rtype="affil")
     else:
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")

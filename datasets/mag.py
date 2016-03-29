@@ -941,7 +941,7 @@ def retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp'):
 
             affil_ids = set()
             for each_affil_name in affil_names:
-                import pdb;pdb.set_trace()
+                # import pdb;pdb.set_trace()
                 name_of_affil = reg_parse(each_affil_name)
                 if name_of_affil:
                     affil = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil, limit=1)
@@ -1021,12 +1021,19 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
         affil_names1.extend(affil_names2)
         affil_names = affil_names1
     elif table_name == 'dblp':
-        rows = db.select(["name", "dblp_key", "affil_name"], table_dblp_auth_affil, where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
-        if rows:
+        affil_names = db.select("affil_name", table_dblp_auth_affil, where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
+        if affil_names:
             n_author_recall += 1
             # import pdb;pdb.set_trace()
-        if len(rows) > 1 and paper_id:
-            retrieve_affils_by_author_papers()
+        if len(affil_names) > 1 and paper_id:
+            import pdb;pdb.set_trace()
+            affil_names2 = retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp')
+            if affil_names2:
+                affil_names = affil_names2
+                print 'succeeded to retrieve affils by paper-author.'
+            else:
+                affil_names = affil_names[:1]
+                print 'failed to retrieve affils by paper-author.'
 
 
     elif table_name == 'csx':
@@ -1035,11 +1042,8 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
         raise ValueError("Unknown table_name. Parameter table_name must be either 'csx' or 'dblp'.")
     match_affil_ids = set()
 
-    # import pdb;pdb.set_trace()
-    # if len(set(affil_names)) > 15:
-        # print author_name
-        # print affil_names
-    for each_affil_name in list(set(affil_names))[:1]:
+
+    for each_affil_name in affil_names:
         if not each_affil_name:
             continue
 
@@ -1132,13 +1136,13 @@ def import_more_conf_pubs(conf_name):
     fields = ['paper_id', 'title', 'year', 'conf_id']
 
     if conf_name == 'SIGIR':
-        from datasets.paper_year_SIGIR import py_sigir
+        from datasets.expanded_SIGIR import py_sigir
         db.insert(into=table_name, fields=fields, values=py_sigir, ignore=True)
     elif conf_name == 'SIGMOD':
-        from datasets.paper_year_SIGMOD import py_sigmod
+        from datasets.expanded_SIGMOD import py_sigmod
         db.insert(into=table_name, fields=fields, values=py_sigmod, ignore=True)
     elif conf_name == 'SIGCOMM':
-        from datasets.paper_year_SIGCOMM import py_sigcomm
+        from datasets.expanded_SIGCOMM import py_sigcomm
         db.insert(into=table_name, fields=fields, values=py_sigcomm, ignore=True)
 
 # for SimpleSearcher
@@ -1279,6 +1283,8 @@ def reg_parse(affil_name):
 if __name__ == '__main__':
     # import_papers(config.DATA + 'Papers/Papers.txt')
     # import_authors('/Volumes/Mixed-Data/data/MAG/Authors/Authors.txt')
+    import_more_conf_pubs('SIGIR')
+    import_more_conf_pubs('SIGMOD')
     import_more_conf_pubs('SIGCOMM')
     # get_conf_pubs(conf_id='460A7036', year=range(2000,2011))
     # pass
