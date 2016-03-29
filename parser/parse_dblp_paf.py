@@ -251,12 +251,12 @@ def get_pubs_by_authors(author_name, dblp_key):
                     doc = each_pub.getElementsByTagName("inproceedings") # conference papers
                     if doc:
                         title = doc[0].getElementsByTagName("title")
-                        if title:
+                        if title and title[0].firstChild.nodeValue:
                             try:
-                                docs_set.add(title[0].firstChild.data.strip('. '))
+                                docs_set.add(title[0].firstChild.nodeValue.strip('. '))
                             except Exception, e:
                                 print e
-                                import pdb;pdb.set_trace()
+                                # import pdb;pdb.set_trace()
                 return docs_set
         else:
             print "failed to find author: %s, dblp_key: %s" % (author_name, dblp_key)

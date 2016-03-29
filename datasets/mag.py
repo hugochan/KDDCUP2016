@@ -914,47 +914,96 @@ def get_conf_pubs(conf_id=None, year=None):
 
 
 
-def retrieve_affils_by_author_papers(author_id, paper_id, table_name='csx'):
-    try:
-        author_name = db.select("name", "authors", where="id='%s'"%author_id, limit=1)[0].strip('\r\n ')
+def retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp'):
+    if table_name == 'csx':
+        try:
+            author_name = db.select("name", "authors", where="id='%s'"%author_id, limit=1)[0].strip('\r\n ')
 
-        paper_table = "selected_papers" # temporary setting, to be improved
-        paper_title = db.select("title", paper_table, where="id='%s'"%paper_id, limit=1)[0].strip('\r\n ')
+            paper_table = "selected_papers" # temporary setting, to be improved
+            paper_title = db.select("title", paper_table, where="id='%s'"%paper_id, limit=1)[0].strip('\r\n ')
 
-        if not author_name or not paper_title:
+            if not author_name or not paper_title:
+                return []
+
+            # transfer to the external paper id
+            transfered_paper_id = db.select("id", "%s_papers"%table_name, \
+                    where="title REGEXP '[[:<:]]%s[[:>:]]'"%paper_title, limit=1)
+
+            if not transfered_paper_id:
+                return []
+            print "transfer paper_id: %s"%transfered_paper_id[0]
+
+            affil_names = db.select("affil", "%s_paper_author_affils"%table_name, \
+                    where="paperid='%s' AND name='%s'"%(transfered_paper_id[0], author_name))
+
+            if not affil_names:
+                return []
+
+            affil_ids = set()
+            for each_affil_name in affil_names:
+                import pdb;pdb.set_trace()
+                name_of_affil = reg_parse(each_affil_name)
+                if name_of_affil:
+                    affil = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil, limit=1)
+                    if affil:
+                        affil_ids.add(affil[0])
+            return list(affil_ids)
+
+        except Exception, e:
+            print e
+            # import pdb;pdb.set_trace()
             return []
 
-        # transfer to the external paper id
-        transfered_paper_id = db.select("id", "%s_papers"%table_name, \
-                where="title REGEXP '[[:<:]]%s[[:>:]]'"%paper_title, limit=1)
 
-        if not transfered_paper_id:
+    elif table_name == 'dblp':
+        try:
+            author_name = db.select("name", "authors", where="id='%s'"%author_id, limit=1)
+            if not author_name:
+                return []
+            else:
+                author_name = author_name[0].strip('\r\n ')
+            paper_title = db.select("title", "selected_papers", where="id='%s'"%paper_id, limit=1)
+
+            if not paper_title:
+                paper_title = db.select("title", "expanded_conf_papers2", where="id='%s'"%paper_id, limit=1)
+
+            if not paper_title:
+                return []
+            else:
+                paper_title = paper_title[0].strip('\r\n. ')
+
+            affil_names = db.select("dblp_auth_affil.affil_name", ["dblp_auth_affil", "dblp_auth_pub"], join_on=["dblp_key", "dblp_key"],
+                    where="(dblp_auth_affil.name='%s' OR dblp_auth_affil.other_names REGEXP '[[:<:]]%s[[:>:]]') AND dblp_auth_pub.pub_title REGEXP '[[:<:]]%s[[:>:]]'"\
+                            %(author_name, author_name, paper_title))
+
+            if not affil_names:
+                return []
+
+            affil_ids = set()
+            for each_affil_name in set(affil_names):
+                # import pdb;pdb.set_trace()
+                name_of_affil = reg_parse(each_affil_name)
+                print "retrieved (by paper-author) affil name: %s"%name_of_affil
+                if name_of_affil:
+                    affil = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil, limit=1)
+                    if affil:
+                        affil_ids.add(affil[0])
+                        print "retrieved (by paper-author) affil id: %s"%affil[0]
+            return list(affil_ids)
+
+        except Exception, e:
+            print e
+            # import pdb;pdb.set_trace()
             return []
-        print "transfer paper_id: %s"%transfered_paper_id[0]
 
-        affil_names = db.select("affil", "%s_paper_author_affils"%table_name, \
-                where="paperid='%s' AND name='%s'"%(transfered_paper_id[0], author_name))
+    else:
+        raise ValueError("Unknown value of parameter table_name. Parameter table_name should either be 'dblp' or 'csx'.")
 
-        if not affil_names:
-            return []
-
-        affil_ids = set()
-        for each_affil_name in affil_names:
-            import pdb;pdb.set_trace()
-            name_of_affil = reg_parse(each_affil_name)
-            if name_of_affil:
-                affil = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil, limit=1)
-                if affil:
-                    affil_ids.add(affil[0])
-        return list(affil_ids)
-
-    except Exception, e:
-        print e
-        import pdb;pdb.set_trace()
-        return []
-
-
-def retrieve_affils_by_authors(author_id, table_name='csx'):
+# retrieve affils based on author name
+# if paper_id is set, we use paper_id to confirm the exact author
+# when there are multiple author-affil pairs
+# which may be caused by shared author names
+def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
     """
     we check csx_paper_author_affils table and do string matching which is knotty.
     """
@@ -963,18 +1012,23 @@ def retrieve_affils_by_authors(author_id, table_name='csx'):
     author_name = db.select("name", "authors", where="id='%s'"%author_id, limit=1)[0].strip('\r\n ')
 
     # print author_name
-    dblp_table = 'dblp_paper_author_affils'
+    table_dblp_auth_affil = 'dblp_auth_affil'
+    table_dblp_auth_pub = 'dblp_auth_pub'
 
     if table_name == 'all':
-        affil_names1 = db.select("affil_name", dblp_table, where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
+        affil_names1 = db.select("affil_name", table_dblp_auth_affil, where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
         affil_names2 = db.select("affil", "csx_paper_author_affils", where="name='%s'"%author_name)
         affil_names1.extend(affil_names2)
         affil_names = affil_names1
     elif table_name == 'dblp':
-        affil_names = db.select("affil_name", dblp_table, where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
-        if affil_names:
+        rows = db.select(["name", "dblp_key", "affil_name"], table_dblp_auth_affil, where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
+        if rows:
             n_author_recall += 1
             # import pdb;pdb.set_trace()
+        if len(rows) > 1 and paper_id:
+            retrieve_affils_by_author_papers()
+
+
     elif table_name == 'csx':
         affil_names = db.select("affil", "csx_paper_author_affils", where="name='%s'"%author_name)
     else:
@@ -1067,14 +1121,15 @@ def retrieve_affils_by_authors(author_id, table_name='csx'):
 
 def import_more_conf_pubs(conf_name):
     table_description = ['paper_id VARCHAR(30) NOT NULL',
+                        'title VARCHAR(300) NOT NULL',
                         'year SMALLINT',
                         'conf_id VARCHAR(30) NOT NULL',
                         'PRIMARY KEY (paper_id)',
                         'KEY (conf_id)'
                         ]
-    table_name = 'expanded_conf_papers'
+    table_name = 'expanded_conf_papers2'
     db.create_table(table_name, table_description)
-    fields = ['paper_id', 'year', 'conf_id']
+    fields = ['paper_id', 'title', 'year', 'conf_id']
 
     if conf_name == 'SIGIR':
         from datasets.paper_year_SIGIR import py_sigir
@@ -1156,7 +1211,7 @@ def get_selected_expand_pubs(conf, year, _type="selected"):
                 # print "paper id: %s"%paper_id
                 # import pdb;pdb.set_trace()
                 # retrieved_affil_ids = None # turn off
-                retrieved_affil_ids, flag = retrieve_affils_by_authors(author_id, table_name='dblp')
+                retrieved_affil_ids, flag = retrieve_affils_by_authors(author_id, table_name='dblp', paper_id=paper_id)
                 if flag == 1:
                     get_affil_count += 1
                 # retrieved_affil_ids = retrieve_affils_by_author_papers(author_id, paper_id, table_name='csx')
