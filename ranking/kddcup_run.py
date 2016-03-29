@@ -11,7 +11,6 @@ import numpy as np
 import config
 from collections import defaultdict
 from mymysql.mymysql import MyMySQL
-from datasets.mag import get_selected_pubs
 from ranking.kddcup_searchers import SimpleSearcher, Searcher
 from evaluation.kddcup_expt import get_results_file, save_results
 
@@ -24,7 +23,9 @@ def rank_affils(selected_affils, conf_name, year, searcher, show=True, results_f
     start = time.time()
 
     if searcher.name() == "SimpleSearcher":
-        results = searcher.search(selected_affils, conf_name, year, age_decay=True, rtype="affil")
+        expand_year = []
+        # expand_year = range(2005, 2011)
+        results = searcher.search(selected_affils, conf_name, year, expand_year=expand_year, age_decay=True, rtype="affil")
         # normalize ranking score
         ids, scores = zip(*results)
         scores = np.array(scores)
@@ -49,14 +50,14 @@ def merge_confs_in_phase(phase, method_name):
                 ],
 
                 [
-                    "KDD", # Phase 2
-                    "ICML"
+                    # "KDD", # Phase 2
+                    # "ICML"
                 ],
 
                 [
-                    "FSE", # Phase 3
-                    "MobiCom",
-                    "MM"
+                    # "FSE", # Phase 3
+                    # "MobiCom",
+                    # "MM"
                 ]
             ]
 
@@ -92,9 +93,9 @@ def merge_confs_in_phase(phase, method_name):
 def main():
 
     confs = [
-                "SIGIR", # Phase 1
+                # "SIGIR", # Phase 1
                 "SIGMOD",
-                "SIGCOMM",
+                # "SIGCOMM",
 
                 # "KDD", # Phase 2
                 # "ICML",
@@ -105,8 +106,8 @@ def main():
             ]
 
     searchers = [
-                    # SimpleSearcher(),
-                    Searcher(**config.PARAMS),
+                    SimpleSearcher(**config.PARAMS),
+                    # Searcher(**config.PARAMS),
 
                 ]
 
@@ -122,12 +123,12 @@ def main():
 
             if s.name() == "SimpleSearcher":
                 s.set_params(**{
-                              'age_relev': .5,
+                              'age_relev': .7,
                               })
 
             if s.name() == "MultiLayered":
                 s.set_params(**{
-                              'H': 1,
+                              'H': 0,
                               # 'age_relev': 0.01, # 0.01
                               'papers_relev': .3,
                               'authors_relev': .4,
@@ -143,6 +144,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # main()
     merge_confs_in_phase(1, "SimpleSearcher")
 

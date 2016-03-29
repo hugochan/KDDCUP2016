@@ -965,7 +965,7 @@ def retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp'):
             paper_title = db.select("title", "selected_papers", where="id='%s'"%paper_id, limit=1)
 
             if not paper_title:
-                paper_title = db.select("title", "expanded_conf_papers2", where="id='%s'"%paper_id, limit=1)
+                paper_title = db.select("title", "expanded_conf_papers2", where="paper_id='%s'"%paper_id, limit=1)
 
             if not paper_title:
                 return []
@@ -1023,10 +1023,10 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
     elif table_name == 'dblp':
         affil_names = db.select("affil_name", table_dblp_auth_affil, where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
         if affil_names:
-            n_author_recall += 1
+            n_author_recall = 1
             # import pdb;pdb.set_trace()
         if len(affil_names) > 1 and paper_id:
-            import pdb;pdb.set_trace()
+            # import pdb;pdb.set_trace()
             affil_names2 = retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp')
             if affil_names2:
                 affil_names = affil_names2

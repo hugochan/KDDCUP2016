@@ -16,7 +16,7 @@ import sys
 import re, time
 
 
-start_author = 0
+start_author = 12500
 
 total_lineno = None
 BASE_URL = 'http://dblp.uni-trier.de/'
@@ -274,7 +274,7 @@ def get_pubs_by_authors(author_name, dblp_key):
         # Too Many Requests
         try:
             print resp.headers
-            twait = resp.headers["Retry-After"]
+            twait = int(resp.headers["Retry-After"])
         except Exception, e:
             print e
             twait = 30 # default
@@ -324,8 +324,8 @@ if __name__ == "__main__":
     fields_auth_pub = ["dblp_key", "pub_title"]
 
     # create table
-    db.create_table(table_auth_affil, table_description_auth_affil, force=True)
-    db.create_table(table_auth_pub, table_description_auth_pub, force=True)
+    db.create_table(table_auth_affil, table_description_auth_affil, force=False)
+    db.create_table(table_auth_pub, table_description_auth_pub, force=False)
 
 
     # create an XMLReader
