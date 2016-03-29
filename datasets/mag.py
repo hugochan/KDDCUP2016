@@ -898,7 +898,7 @@ def get_conf_pubs(conf_id=None, year=None):
             ['papers', 'paper_author_affils'], join_on=['id', 'paper_id'], \
             where=where_cond)
 
-    import pdb;pdb.set_trace()
+    # import pdb;pdb.set_trace()
     # re-pack data to this format: {paper_id: {author_id:[affil_id,],},}
     pub_records = defaultdict()
     for paper_id, author_id, affil_id, year in rst:
