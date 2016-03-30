@@ -1027,6 +1027,7 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
             # import pdb;pdb.set_trace()
         if len(affil_names) > 1 and paper_id:
             # import pdb;pdb.set_trace()
+
             affil_names2 = retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp')
             if affil_names2:
                 affil_names = affil_names2
@@ -1215,6 +1216,7 @@ def get_selected_expand_pubs(conf, year, _type="selected"):
                 # print "paper id: %s"%paper_id
                 # import pdb;pdb.set_trace()
                 # retrieved_affil_ids = None # turn off
+                # import pdb;pdb.set_trace()
                 retrieved_affil_ids, flag = retrieve_affils_by_authors(author_id, table_name='dblp', paper_id=paper_id)
                 if flag == 1:
                     get_affil_count += 1

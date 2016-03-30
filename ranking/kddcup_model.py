@@ -268,7 +268,9 @@ class ModelBuilder:
       # Expand the docs by getting more papers from the targeted conference
       # expanded_pubs = self.get_expanded_pubs_by_conf(conf_name, [2009, 2010])
       nodes = set(docs)
-      expanded_pubs = self.get_expanded_pubs_by_conf2(conf_name, range(2005, 2011))
+      # expanded_year = []
+      expanded_year = range(2005, 2011)
+      expanded_pubs = self.get_expanded_pubs_by_conf2(conf_name, expanded_year)
 
       # add year
       for paper, year in expanded_pubs:
@@ -312,7 +314,8 @@ class ModelBuilder:
     conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
 
     year_str = ",".join(["'%s'" % y for y in year])
-    expanded_pubs = db.select(["paper_id", "year"], "expanded_conf_papers", where="conf_id='%s' and year IN (%s)"%(conf_id, year_str))
+    year_cond =  " AND year IN (%s)"%year_str if year_str else ''
+    expanded_pubs = db.select(["paper_id", "year"], "expanded_conf_papers", where="conf_id='%s'%s"%(conf_id, year_cond))
 
     return expanded_pubs
 
@@ -862,7 +865,7 @@ class ModelBuilder:
       graph.add_node(next_id,
                type="paper",
                entity_id=pub,
-               year=self.pub_years[pub]
+               year=self.pub_years[pub] if self.pub_years.has_key(pub) else 0
                )
 
       pubs_ids[pub] = next_id
@@ -1096,6 +1099,7 @@ class ModelBuilder:
           # To be improved, we only retrieve affils
           # when we don't know any affils which the author belongs to
           if len(affil_ids) == 1:
+            # import pdb;pdb.set_trace()
             missing_author += 1
             # we check external data (e.g., csx dataset) and do string matching which is knotty.
             match_affil_ids, _ = retrieve_affils_by_authors(author_id, table_name='dblp')

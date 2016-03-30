@@ -134,8 +134,8 @@ def main():
             ]
 
     searchers = [
-                    # SimpleSearcher(**config.PARAMS),
-                    Searcher(**config.PARAMS),
+                    SimpleSearcher(**config.PARAMS),
+                    # Searcher(**config.PARAMS),
 
                 ]
 
@@ -169,8 +169,8 @@ def main():
                               'authors_relev': .01, # .01
                               # 'words_relev': .2,
                               # 'venues_relev' : .2,
-                              'author_affils_relev': .95, # .95, .99, .99
-                              'alpha': 0.01}) # .01, .35, .25
+                              'author_affils_relev': .99, # .95, .99, .99
+                              'alpha': 0.35}) # .01, .35, .25
 
             rfile = get_results_file(c, s.name())
             get_search_metrics(selected_affils, ground_truth, c, year, s,\

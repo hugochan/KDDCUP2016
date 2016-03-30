@@ -16,7 +16,7 @@ import sys
 import re, time
 
 
-start_author = 12500
+start_author = 0
 
 total_lineno = None
 BASE_URL = 'http://dblp.uni-trier.de/'
@@ -27,6 +27,11 @@ auth_pub_bulk = set()
 
 url_pattern = '^(http[s]*://)([.a-z^/][^/]+[.a-z^/])?'
 url_prog = re.compile(url_pattern)
+
+homepage_pattern1 = 'http://dblp.uni-trier.de/pers/hd/(.)*"\s+itemprop="url"'
+homepage_pattern2 = 'hd/(\S)+"'
+homepage_prog1 = re.compile(homepage_pattern1)
+homepage_prog2 = re.compile(homepage_pattern2)
 # alltags = set()
 
 # All tags we have in dblp.xml
@@ -235,56 +240,148 @@ def get_pubs_by_authors(author_name, dblp_key):
 
     # fetchs and parses the xml file
     resp = requests.get(url)
+
     if resp.status_code == 200:
         # import pdb;pdb.set_trace()
-        DOMTree = xml.dom.minidom.parseString(resp.content)
-        dblp_person = DOMTree.documentElement
-        # checks if this is exactlly the wanted homepage using dblp key
-        person = dblp_person.getElementsByTagName("person")
-        if person and person[0].hasAttribute("key"):
-            if not dblp_key == person[0].getAttribute("key"): # not the right person
-                print "failed to find author: %s, dblp_key: %s" % (author_name, dblp_key)
-                # import pdb;pdb.set_trace()
-                return set()
+        pubs = parse_xml(resp.content, dblp_key)
 
-            else:
-                # right person
-                # fetchs pubs
-                docs_set = set()
-                # fetchs conference pubs
-                pubs = dblp_person.getElementsByTagName("r")
-                for each_pub in pubs:
-                    doc = each_pub.getElementsByTagName("inproceedings") # conference papers
-                    if doc:
-                        title = doc[0].getElementsByTagName("title")
-                        if title and title[0].firstChild.nodeValue:
-                            try:
-                                docs_set.add(title[0].firstChild.nodeValue.strip('. '))
-                            except Exception, e:
-                                print e
-                                # import pdb;pdb.set_trace()
-                return docs_set
-        else:
-            print "failed to find author: %s, dblp_key: %s" % (author_name, dblp_key)
-            # import pdb;pdb.set_trace()
+        return pubs
+
+    elif resp.status_code == 404:
+        # The page is not found
+        # Searches homepage directly by author name
+        content = search_homepages(author_name)
+        if not content:
+            print "failed to find author: %s, dblp_key: %s (cannot find the homepage.)" % (author_name, dblp_key)
             return set()
 
-        dblp.getElementsByTagName("r")
+        pubs = parse_xml(content, dblp_key)
+
+        return pubs
+
     elif resp.status_code == 429:
         # Too Many Requests
         try:
-            print resp.headers
+            # print resp.headers
             twait = int(resp.headers["Retry-After"])
         except Exception, e:
             print e
             twait = 30 # default
+
         time.sleep(twait)
-        # import pdb;pdb.set_trace()
         print 'wait %s seconds. Retry...' % twait
+
         return get_pubs_by_authors(author_name, dblp_key)
 
     else:
-        print "failed to find author: %s, dblp_key: %s" % (author_name, dblp_key)
+        print "failed to find author: %s, dblp_key: %s (unknown reasons.)" % (author_name, dblp_key)
+
+        return set()
+
+def search_homepages(author_name):
+    search_url = "%ssearch?q=%s" % (BASE_URL, '+'.join(author_name.split(' ')))
+    resp = requests.get(search_url)
+    # import pdb;pdb.set_trace()
+    if resp.status_code == 200:
+        # get the url of homepage
+        rst = homepage_prog1.search(resp.content)
+        if rst:
+            rst = homepage_prog2.search(rst.group(0))
+            if rst:
+                partital_url = rst.group(0).replace('hd/','').replace('"','')
+                url = "%spers/xx/%s.xml" % (BASE_URL, partital_url)
+                resp = requests.get(url)
+
+                if resp.status_code == 200:
+                    # import pdb;pdb.set_trace()
+                    return resp.content
+
+                elif resp.status_code == 404:
+                    # The page is not found
+                    # Searches homepage directly by author name
+                    print "failed to find author: %s (cannot find the homepage.)" % (author_name)
+                    return ''
+
+                elif resp.status_code == 429:
+                    # Too Many Requests
+                    try:
+                        # print resp.headers
+                        twait = int(resp.headers["Retry-After"])
+                    except Exception, e:
+                        print e
+                        twait = 30 # default
+
+                    time.sleep(twait)
+                    print 'wait %s seconds. Retry...' % twait
+
+                    return search_homepages(author_name)
+
+        print "failed to find author: %s (unknown reasons.)" % (author_name)
+
+        return ''
+
+    elif resp.status_code == 404:
+        print "search API does not work currently."
+        return ''
+
+    elif resp.status_code == 429:
+        # Too Many Requests
+        try:
+            # print resp.headers
+            twait = int(resp.headers["Retry-After"])
+        except Exception, e:
+            print e
+            twait = 30 # default
+
+        time.sleep(twait)
+        print 'wait %s seconds. Retry...' % twait
+
+        return search_homepages(author_name)
+
+    else:
+        return ''
+
+
+
+def parse_xml(content, dblp_key):
+    """
+    parses dblp homepages and returns the publications.
+    dblp_key is used for checking.
+    """
+
+    try:
+        DOMTree = xml.dom.minidom.parseString(content)
+    except Exception, e:
+        print e
+        return set()
+
+    dblp_person = DOMTree.documentElement
+    # checks if this is exactlly the wanted homepage using dblp key
+    person = dblp_person.getElementsByTagName("person")
+    if person and person[0].hasAttribute("key"):
+        if not dblp_key == person[0].getAttribute("key"): # not the right person
+            # import pdb;pdb.set_trace()
+            return set()
+
+        else:
+            # right person
+            # fetchs pubs
+            docs_set = set()
+            # fetchs conference pubs
+            pubs = dblp_person.getElementsByTagName("r")
+            for each_pub in pubs:
+                doc = each_pub.getElementsByTagName("inproceedings") # conference papers
+                if doc:
+                    title = doc[0].getElementsByTagName("title")
+                    if title and title[0].firstChild.nodeValue:
+                        try:
+                            docs_set.add(title[0].firstChild.nodeValue.strip('. '))
+                        except Exception, e:
+                            print e
+                            # import pdb;pdb.set_trace()
+            return docs_set
+
+    else:
         # import pdb;pdb.set_trace()
         return set()
 
@@ -310,7 +407,7 @@ if __name__ == "__main__":
                         'KEY (dblp_key)',
                         'KEY (name)']
 
-    table_auth_affil = "dblp_auth_affil"
+    table_auth_affil = "dblp_auth_affil_test"
     fields_auth_affil = ["dblp_key", "name", "other_names", "affil_name"]
 
     # table 2)
@@ -320,7 +417,7 @@ if __name__ == "__main__":
                         'PRIMARY KEY (id)',
                         'KEY (dblp_key)']
 
-    table_auth_pub = "dblp_auth_pub"
+    table_auth_pub = "dblp_auth_pub_test"
     fields_auth_pub = ["dblp_key", "pub_title"]
 
     # create table
@@ -342,6 +439,7 @@ if __name__ == "__main__":
     if auth_affil_bulk:
         db.insert(into=table_auth_affil, fields=fields_auth_affil, values=list(auth_affil_bulk), ignore=True)
         # pass
+
     if auth_pub_bulk:
         db.insert(into=table_auth_pub, fields=fields_auth_pub, values=list(auth_pub_bulk), ignore=True)
 

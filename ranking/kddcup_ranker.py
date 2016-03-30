@@ -278,7 +278,7 @@ def rank_nodes(graph, papers_relev=0.2,
     old_year = PARAMS['old_year']
     years = []
     for u in graph.nodes() :
-        if is_paper(u) :
+        if is_paper(u) and graph.node[u].has_key("year"):
             if (graph.node[u]["year"] > 0) :
                 years.append(graph.node[u]["year"])
 
@@ -298,14 +298,30 @@ def rank_nodes(graph, papers_relev=0.2,
 
         # Also apply the age attenuator to control relevance of old and highly cited papers
             if is_paper(v) and is_paper(u):
-                year = graph.node[v]["year"] # year of u or v?
-                if year == 0:
-                    year = year_median
+                # 1)
+                if graph.node[v].has_key("year"):
+                    year = graph.node[v]["year"] # year of u or v?
+
+                    if year == 0:
+                        year = year_median
+                    else:
+                        year = min(max(year, old_year), current_year)
                 else:
-                    year = min(max(year, old_year), current_year)
+                    year = year_median
 
                 # weight = 1.0
                 weight = np.exp(-(age_relev)*(current_year-year))
+
+
+
+                # # 2)
+                # yu = graph.node[u]["year"] if graph.node[u].has_key("year") else year_median
+                # yv = graph.node[v]["year"] if graph.node[v].has_key("year") else year_median
+                # diff = abs(yu - yv)
+
+                # weight = np.exp(-(age_relev)*diff)
+
+
 
                 atts['weight'] = weight
 #               print weight
