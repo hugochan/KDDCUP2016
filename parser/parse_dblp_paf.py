@@ -228,41 +228,46 @@ def retrieve_affils_by_urls2(url, search_engine='google'):
         domain_url = rst[0][0] + 'www.' + '.'.join(tokens[-2:])
 
     # resp = requests.get(rst.group(0))
-    resp = requests.get(domain_url)
+    try:
+        resp = requests.get(domain_url)
+    except Exception, e:
+        print e
+        success_flag = False
+    else:
 
-    if resp.status_code == 200:
-        # import pdb;pdb.set_trace()
-        title = re.findall('<title>(.+?)</title>', resp.content)
-        if title:
-            affil_names = reg_parse_affil_name(title[0])
-            if affil_names:
-                return set([affil_names])
+        if resp.status_code == 200:
+            # import pdb;pdb.set_trace()
+            title = re.findall('<title>(.+?)</title>', resp.content)
+            if title:
+                affil_names = reg_parse_affil_name(title[0])
+                if affil_names:
+                    return set([affil_names])
+                else:
+                    success_flag = False
+
             else:
                 success_flag = False
 
+
+        elif resp.status_code == 429:
+            # Too Many Requests
+            try:
+                # print resp.headers
+                twait = int(resp.headers["Retry-After"])
+            except Exception, e:
+                print e
+                twait = 30 # default
+
+            time.sleep(twait)
+            print 'wait %s seconds. Retry...' % twait
+
+            return retrieve_affils_by_urls2(url)
+
         else:
+            # print "failed to retrieve the affil given the url: %s" % url
+
+            # return set()
             success_flag = False
-
-
-    elif resp.status_code == 429:
-        # Too Many Requests
-        try:
-            # print resp.headers
-            twait = int(resp.headers["Retry-After"])
-        except Exception, e:
-            print e
-            twait = 30 # default
-
-        time.sleep(twait)
-        print 'wait %s seconds. Retry...' % twait
-
-        return retrieve_affils_by_urls2(url)
-
-    else:
-        # print "failed to retrieve the affil given the url: %s" % url
-
-        # return set()
-        success_flag = False
 
     if not success_flag:
 
@@ -278,68 +283,72 @@ def retrieve_affils_by_urls2(url, search_engine='google'):
         # some reason.
         if 'google' in tokens and 'scholar' in tokens:
 
-
-            resp = requests.get(url)
-
-            if resp.status_code == 200:
-                affil_names = reg_parse_affil_name(resp.content)
-                if affil_names:
-                    return set([affil_names])
-                else:
-                    success_flag = False
-
-            elif resp.status_code == 429:
-                # Too Many Requests
-                try:
-                    # print resp.headers
-                    twait = int(resp.headers["Retry-After"])
-                except Exception, e:
-                    print e
-                    twait = 30 # default
-
-                time.sleep(twait)
-                print 'wait %s seconds. Retry...' % twait
-
-                return retrieve_affils_by_urls2(url)
-
-            else:
-                # print "failed to retrieve the affil given the url: %s" % url
-
-                # return set()
+            try:
+                resp = requests.get(url)
+            except Exception, e:
+                print e
                 success_flag = False
-        # else:
-            # return set()
-            # success_flag = False
+            else:
+                if resp.status_code == 200:
+                    affil_names = reg_parse_affil_name(resp.content)
+                    if affil_names:
+                        return set([affil_names])
+                    else:
+                        success_flag = False
+
+                elif resp.status_code == 429:
+                    # Too Many Requests
+                    try:
+                        # print resp.headers
+                        twait = int(resp.headers["Retry-After"])
+                    except Exception, e:
+                        print e
+                        twait = 30 # default
+
+                    time.sleep(twait)
+                    print 'wait %s seconds. Retry...' % twait
+
+                    return retrieve_affils_by_urls2(url)
+
+                else:
+                    # print "failed to retrieve the affil given the url: %s" % url
+
+                    # return set()
+                    success_flag = False
 
 
         # 3) for some titles not written in English, we search the url with search engine
         if not success_flag:
 
-            resp = requests.get('https://www.bing.com/search?q=%s'%domain_url)
-            if resp.status_code == 200:
-                affil_names = reg_parse_affil_name(resp.content)
-                # findall()
-                return set([affil_names]) if affil_names else set()
-
-            elif resp.status_code == 429:
-                # Too Many Requests
-                try:
-                    # print resp.headers
-                    twait = int(resp.headers["Retry-After"])
-                except Exception, e:
-                    print e
-                    twait = 30 # default
-
-                time.sleep(twait)
-                print 'wait %s seconds. Retry...' % twait
-
-                return retrieve_affils_by_urls2(url)
-
-            else:
-                print "failed to retrieve the affil given the url: %s" % url
-
+            try:
+                resp = requests.get('https://www.bing.com/search?q=%s'%domain_url)
+            except Exception, e:
+                print e
                 return set()
-            # return set()
+            else:
+                if resp.status_code == 200:
+                    affil_names = reg_parse_affil_name(resp.content)
+                    # findall()
+                    return set([affil_names]) if affil_names else set()
+
+                elif resp.status_code == 429:
+                    # Too Many Requests
+                    try:
+                        # print resp.headers
+                        twait = int(resp.headers["Retry-After"])
+                    except Exception, e:
+                        print e
+                        twait = 30 # default
+
+                    time.sleep(twait)
+                    print 'wait %s seconds. Retry...' % twait
+
+                    return retrieve_affils_by_urls2(url)
+
+                else:
+                    print "failed to retrieve the affil given the url: %s" % url
+
+                    return set()
 
 
 
