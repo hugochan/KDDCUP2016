@@ -18,13 +18,13 @@ db = MyMySQL(config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
 
 
 # regexp patterns
-univ_academy_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(University|Universidade|Academy|Council)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
-institute_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(Institute)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
-college_pattern = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(College|Centre|Center)[^,;:.\\d]*(?=,|\\d|;|-|\\.)'
+univ_academy_pattern = '([A-Z][^\\s,.:;>]+[.]?\\s[(]?)*(University|Universidade|Academy|Council)[^,<;:.\\d]*(?=,|\\d|;|<|:|-|\\.)'
+institute_pattern = '([A-Z][^\\s,.:;>]+[.]?\\s[(]?)*(Institute)[^,<;:.\\d]*(?=,|\\d|;|<|:|-|\\.)'
+college_pattern = '([A-Z][^\\s,.:;>]+[.]?\\s[(]?)*(College|Centre|Center)[^,<;:.\\d]*(?=,|\\d|;|<|:|-|\\.)'
 
-univ_academy_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(University|Universidade|Academy|Council)[^,;:.\\d]*$'
-institute_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(Institute)[^,;:.\\d]*$'
-college_pattern2 = '([A-Z][^\\s,.:;]+[.]?\\s[(]?)*(College|Centre|Center)[^,;:.\\d]*$'
+univ_academy_pattern2 = '([A-Z][^\\s,.:;>]+[.]?\\s[(]?)*(University|Universidade|Academy|Council)[^,<;:.\\d]*$'
+institute_pattern2 = '([A-Z][^\\s,.:;>]+[.]?\\s[(]?)*(Institute)[^,<;:.\\d]*$'
+college_pattern2 = '([A-Z][^\\s,.:;>]+[.]?\\s[(]?)*(College|Centre|Center)[^,<;:.\\d]*$'
 
 
 univ_academy_prog = re.compile(univ_academy_pattern)
@@ -942,7 +942,7 @@ def retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp'):
             affil_ids = set()
             for each_affil_name in affil_names:
                 # import pdb;pdb.set_trace()
-                name_of_affil = reg_parse(each_affil_name)
+                name_of_affil = reg_parse_affil_name(each_affil_name)
                 if name_of_affil:
                     affil = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil, limit=1)
                     if affil:
@@ -982,7 +982,7 @@ def retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp'):
             affil_ids = set()
             for each_affil_name in set(affil_names):
                 # import pdb;pdb.set_trace()
-                name_of_affil = reg_parse(each_affil_name)
+                name_of_affil = reg_parse_affil_name(each_affil_name)
                 print "retrieved (by paper-author) affil name: %s"%name_of_affil
                 if name_of_affil:
                     affil = db.select("id", "affils", where="name REGEXP '[[:<:]]%s[[:>:]]'"%name_of_affil, limit=1)
@@ -1094,7 +1094,7 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
 
             if not match_flag:
                 # 2) then, check full name
-                name_of_affil = reg_parse(each_affil_name) # parse affil names
+                name_of_affil = reg_parse_affil_name(each_affil_name) # parse affil names
                 if not name_of_affil:
                     # if n_author_recall > 0:
                         # print name_of_affil
@@ -1254,7 +1254,7 @@ def get_selected_expand_pubs(conf, year, _type="selected"):
     return pub_records
 
 
-def reg_parse(affil_name):
+def reg_parse_affil_name(affil_name):
     normal_affil_name = affil_name.title().replace('Univ.', 'University')\
                 .replace('Umversity', 'University').replace('Universit', 'University')\
                 .replace('Universityy', 'University') # low-prob case
@@ -1274,10 +1274,11 @@ def reg_parse(affil_name):
                         if not rst:
                             # print each_affil_name
                             # import pdb;pdb.set_trace()
-                            return
+                            return ''
 
-    name_of_affil = rst.group(0).replace('-', '').replace('The', '')\
+    name_of_affil = rst.group(0).replace('-', ' ').replace('The', '')\
                             .replace('(', '').replace(')', '').strip()
+    name_of_affil = ' '.join(name_of_affil.split()) # a stupid way to merge multiple space chars to a single one
     return name_of_affil
 
 

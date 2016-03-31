@@ -10,6 +10,7 @@ import xml.sax
 import xml.dom.minidom
 from mymysql.mymysql import MyMySQL
 from datasets.affil_names import url_keywords
+from datasets.mag import reg_parse_affil_name
 import config
 import subprocess
 import sys
@@ -88,6 +89,7 @@ class DBLPHandler(xml.sax.ContentHandler):
         # alltags.add(tag)
 
 
+
     # Call when an elements ends
     def endElement(self, tag):
         if self.valid and tag == "www":
@@ -98,6 +100,8 @@ class DBLPHandler(xml.sax.ContentHandler):
             if not self.affils and self.url: # retrieve affils based on urls
                 self.affils = retrieve_affils_by_urls(self.url)
                 if not self.affils:
+                    self.affils = retrieve_affils_by_urls2(self.url)
+                if not self.affils:
                     print self.url#, self.affils
 
 
@@ -105,7 +109,6 @@ class DBLPHandler(xml.sax.ContentHandler):
                 affil_names = self.affils
 
                 if self.authors:
-                    # import pdb;pdb.set_trace()
 
                     author_name = self.authors[0]
                     pubs = set()
@@ -144,6 +147,7 @@ class DBLPHandler(xml.sax.ContentHandler):
                     if len(auth_affil_bulk) % 500 == 0:
                         if self.nrows_auth_affil >= start_author:
                             db.insert(into=self.table_auth_affil, fields=self.fields_auth_affil, values=list(auth_affil_bulk), ignore=True)
+                            # pass
                         auth_affil_bulk.clear()
                         self.nrows_auth_affil += 500
 
@@ -205,12 +209,155 @@ def file_len(fname):
     return int(result.strip().split()[0])
 
 
+def retrieve_affils_by_urls2(url, search_engine='google'):
+    """
+    more sophisticated.
+    """
+
+    success_flag = False
+    # 1) check domain page
+    # rst = url_prog.search(url)
+    rst = re.findall('^(http[s]*://)([.a-z^/][^/]+[.a-z^/])?', url)
+    if not rst:
+        return set()
+
+    tokens = rst[0][1].split('.')
+    if 'edu' in tokens:
+        domain_url = rst[0][0] + 'www.' + '.'.join(tokens[(tokens.index('edu') - 1):])
+    else:
+        domain_url = rst[0][0] + 'www.' + '.'.join(tokens[-2:])
+
+    # resp = requests.get(rst.group(0))
+    resp = requests.get(domain_url)
+
+    if resp.status_code == 200:
+        # import pdb;pdb.set_trace()
+        title = re.findall('<title>(.+?)</title>', resp.content)
+        if title:
+            affil_names = reg_parse_affil_name(title[0])
+            if affil_names:
+                return set([affil_names])
+            else:
+                success_flag = False
+
+        else:
+            success_flag = False
+
+
+    elif resp.status_code == 429:
+        # Too Many Requests
+        try:
+            # print resp.headers
+            twait = int(resp.headers["Retry-After"])
+        except Exception, e:
+            print e
+            twait = 30 # default
+
+        time.sleep(twait)
+        print 'wait %s seconds. Retry...' % twait
+
+        return retrieve_affils_by_urls2(url)
+
+    else:
+        # print "failed to retrieve the affil given the url: %s" % url
+
+        # return set()
+        success_flag = False
+
+    if not success_flag:
+
+
+        # 2) search the homepage
+        # unfortunately, we can only do some rough matching currently
+        # (i.e., we only match university, college or institute which might
+        # overkill some info or obtain incorrect info.)
+
+        # To avoid false positive, we only use this strategy on google scholar homepage
+        # which often contains clean and simple data. We found that many of pages linked to
+        # Wikipedia, but it's not easy to retrieve correct affilations from such pages for
+        # some reason.
+        if 'google' in tokens and 'scholar' in tokens:
+
+
+            resp = requests.get(url)
+
+            if resp.status_code == 200:
+                affil_names = reg_parse_affil_name(resp.content)
+                if affil_names:
+                    return set([affil_names])
+                else:
+                    success_flag = False
+
+            elif resp.status_code == 429:
+                # Too Many Requests
+                try:
+                    # print resp.headers
+                    twait = int(resp.headers["Retry-After"])
+                except Exception, e:
+                    print e
+                    twait = 30 # default
+
+                time.sleep(twait)
+                print 'wait %s seconds. Retry...' % twait
+
+                return retrieve_affils_by_urls2(url)
+
+            else:
+                # print "failed to retrieve the affil given the url: %s" % url
+
+                # return set()
+                success_flag = False
+        # else:
+            # return set()
+            # success_flag = False
+
+
+        # 3) for some titles not written in English, we search the url with search engine
+        if not success_flag:
+
+            resp = requests.get('https://www.bing.com/search?q=%s'%domain_url)
+            if resp.status_code == 200:
+                affil_names = reg_parse_affil_name(resp.content)
+                # findall()
+                return set([affil_names]) if affil_names else set()
+
+            elif resp.status_code == 429:
+                # Too Many Requests
+                try:
+                    # print resp.headers
+                    twait = int(resp.headers["Retry-After"])
+                except Exception, e:
+                    print e
+                    twait = 30 # default
+
+                time.sleep(twait)
+                print 'wait %s seconds. Retry...' % twait
+
+                return retrieve_affils_by_urls2(url)
+
+            else:
+                print "failed to retrieve the affil given the url: %s" % url
+
+                return set()
+            # return set()
+
+
+
 def retrieve_affils_by_urls(url):
+    """
+    using table matching.
+    """
+
     rst = url_prog.search(url)
     if rst:
         url_tokens = rst.group(0).replace('/', '.').split('.')
         for k, v in url_keywords.iteritems():
-            if k in url_tokens:
+            flag = True
+            for each in k.split():
+                if not each in url_tokens:
+                    flag = False
+                    break
+            if flag:
                 return set([v])
 
     return set()
@@ -386,6 +533,8 @@ def parse_xml(content, dblp_key):
         return set()
 
 
+
+
 if __name__ == "__main__":
     try:
         in_file = sys.argv[1]
@@ -407,7 +556,7 @@ if __name__ == "__main__":
                         'KEY (dblp_key)',
                         'KEY (name)']
 
-    table_auth_affil = "dblp_auth_affil_test"
+    table_auth_affil = "dblp_auth_affil2"
     fields_auth_affil = ["dblp_key", "name", "other_names", "affil_name"]
 
     # table 2)
@@ -417,12 +566,12 @@ if __name__ == "__main__":
                         'PRIMARY KEY (id)',
                         'KEY (dblp_key)']
 
-    table_auth_pub = "dblp_auth_pub_test"
+    table_auth_pub = "dblp_auth_pub2"
     fields_auth_pub = ["dblp_key", "pub_title"]
 
     # create table
-    db.create_table(table_auth_affil, table_description_auth_affil, force=False)
-    db.create_table(table_auth_pub, table_description_auth_pub, force=False)
+    db.create_table(table_auth_affil, table_description_auth_affil, force=True)
+    db.create_table(table_auth_pub, table_description_auth_pub, force=True)
 
 
     # create an XMLReader
@@ -433,6 +582,8 @@ if __name__ == "__main__":
     # override the default ContextHandler
     Handler = DBLPHandler(locator, table_auth_affil, fields_auth_affil, table_auth_pub, fields_auth_pub)
     parser.setContentHandler(Handler)
+
+
     parser.parse(in_file)
 
     # write remaining data into db
@@ -442,10 +593,11 @@ if __name__ == "__main__":
 
     if auth_pub_bulk:
         db.insert(into=table_auth_pub, fields=fields_auth_pub, values=list(auth_pub_bulk), ignore=True)
+        # pass
 
     # print len(alltags)
 
     # docs_set = get_pubs_by_authors(in_file, sys.argv[2])
     # print docs_set
     # print len(docs_set)
-    # print "It's done."
+    print "It's done."
