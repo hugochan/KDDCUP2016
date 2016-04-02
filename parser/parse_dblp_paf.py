@@ -15,9 +15,23 @@ import config
 import subprocess
 import sys
 import re, time
+import chardet
 
 
+from requests.adapters import HTTPAdapter
+
+s = requests.Session()
+s.mount('https://', HTTPAdapter(max_retries=5))
+s.mount('http://', HTTPAdapter(max_retries=5))
+
+
+# For test
+# Begin
 start_author = 0
+start_dblp_key = "homepages/90/5406"
+# start_flag = False
+# End
+
 
 total_lineno = None
 BASE_URL = 'http://dblp.uni-trier.de/'
@@ -56,10 +70,12 @@ class DBLPHandler(xml.sax.ContentHandler):
         self.authors = []
         self.affils = set()
         # self.auth_affil_bulk = set()
-        self.valid_count = 0 # num of homepage records
+        self.valid_count = 0 # num of homepage records as well as total number of authors including those we failed to find affils
         self.author_count = 0 # num of valid (i.e., having affils) authors
+        self.auth_pub_count = 0
         self.count = 0 # num of tags
         self.nrows_auth_affil = 0
+        self.start_flag = False
     # # Weird errors, does not work, so we adopt a stupid way here, set auth_affil_bulk as global
     # def __del__(self):
     #     super(xml.sax.ContentHandler, self).__del__()
@@ -96,8 +112,35 @@ class DBLPHandler(xml.sax.ContentHandler):
 
             self.valid = False # reset flag
 
+            if self.dblp_key == start_dblp_key:
+                self.start_flag = True
+                print "Start to get authors, affils, pubs..."
+                if self.authors:
+                    self.authors[:] = []
+                if self.affils:
+                    self.affils.clear()
+                self.url = ""
+                self.dblp_key = ""
+                self.is_affil = False
+                return
+
+            # for test
+            if not self.start_flag:
+                if self.authors:
+                    self.authors[:] = []
+                if self.affils:
+                    self.affils.clear()
+                self.url = ""
+                self.dblp_key = ""
+                self.is_affil = False
+                return
+
+
+
+
             # pack data
             if not self.affils and self.url: # retrieve affils based on urls
+                # import pdb;pdb.set_trace()
                 self.affils = retrieve_affils_by_urls(self.url)
                 if not self.affils:
                     self.affils = retrieve_affils_by_urls2(self.url)
@@ -114,6 +157,9 @@ class DBLPHandler(xml.sax.ContentHandler):
                     pubs = set()
                     if self.nrows_auth_affil >= start_author:
                         pubs = get_pubs_by_authors(author_name, self.dblp_key) # passes author_name before cleanning it
+                    if pubs:
+                        self.auth_pub_count += 1
+
                     author_name = re.sub(" \d+", " ", author_name) # remove digits at the end of the string
                     other_names = self.authors[1:]
                     # write to db
@@ -129,12 +175,6 @@ class DBLPHandler(xml.sax.ContentHandler):
 
                     auth_pub_bulk.update(auth_pubs)
 
-                    if len(auth_affil_bulk) % 500 == 0:
-                        if self.nrows_auth_affil >= start_author:
-                            db.insert(into=self.table_auth_pub, fields=self.fields_auth_pub, values=list(auth_pub_bulk), ignore=True)
-                        auth_pub_bulk.clear()
-
-
 
                     # 2) one author may have multiple affils, we store all of them
                     auth_affils = set()
@@ -146,10 +186,22 @@ class DBLPHandler(xml.sax.ContentHandler):
                     # table_auth_affil, fields_auth_affil, table_auth_pub, fields_auth_pub
                     if len(auth_affil_bulk) % 500 == 0:
                         if self.nrows_auth_affil >= start_author:
-                            db.insert(into=self.table_auth_affil, fields=self.fields_auth_affil, values=list(auth_affil_bulk), ignore=True)
+                            try:
+                                db.insert(into=self.table_auth_affil, fields=self.fields_auth_affil, values=list(auth_affil_bulk), ignore=True)
+                            except Exception,e:
+                                print e
+                                import pdb;pdb.set_trace()
                             # pass
                         auth_affil_bulk.clear()
                         self.nrows_auth_affil += 500
+
+
+
+                    if len(auth_affil_bulk) % 500 == 0:
+                        if self.nrows_auth_affil >= start_author:
+                            db.insert(into=self.table_auth_pub, fields=self.fields_auth_pub, values=list(auth_pub_bulk), ignore=True)
+                        auth_pub_bulk.clear()
+
 
                     self.author_count += 1
                     if self.author_count % 1000 == 0:
@@ -181,13 +233,20 @@ class DBLPHandler(xml.sax.ContentHandler):
 
         self.CurrentTag = ""
 
+
+
     # Call when a character is read
     def characters(self, content):
         if self.valid and self.CurrentTag == "author":
             self.authors.append(content.strip('\r\n').strip())
 
         elif self.is_affil and self.CurrentTag == "note":
-            self.affils.add(content.strip('\r\n').strip())
+            # some affil name in the tag is not quite clean (e.g., Yangzhou University, School of Mathematics,
+            # but what we really want is Yangzhou University)
+            # try cleaning it if that applies
+            clean = reg_parse_affil_name(content.strip('\r\n '))
+            affil_name = clean if clean else content.strip('\r\n ')
+            self.affils.add(affil_name)
 
         elif self.valid and self.CurrentTag == "url":
             self.url = content.strip()
@@ -224,6 +283,10 @@ def retrieve_affils_by_urls2(url, search_engine='google'):
     tokens = rst[0][1].split('.')
     if 'edu' in tokens:
         domain_url = rst[0][0] + 'www.' + '.'.join(tokens[(tokens.index('edu') - 1):])
+    elif 'ac' in tokens:
+        domain_url = rst[0][0] + 'www.' + '.'.join(tokens[(tokens.index('ac') - 1):])
+    elif 're' in tokens:
+        domain_url = rst[0][0] + 'www.' + '.'.join(tokens[(tokens.index('re') - 1):])
     else:
         domain_url = rst[0][0] + 'www.' + '.'.join(tokens[-2:])
 
@@ -233,6 +296,7 @@ def retrieve_affils_by_urls2(url, search_engine='google'):
     except Exception, e:
         print e
         success_flag = False
+        # import pdb;pdb.set_trace()
     else:
 
         if resp.status_code == 200:
@@ -241,6 +305,8 @@ def retrieve_affils_by_urls2(url, search_engine='google'):
             if title:
                 affil_names = reg_parse_affil_name(title[0])
                 if affil_names:
+                    # convert to utf-8 if necessary
+                    affil_names = convert_to_unicode(affil_names)
                     return set([affil_names])
                 else:
                     success_flag = False
@@ -292,6 +358,7 @@ def retrieve_affils_by_urls2(url, search_engine='google'):
                 if resp.status_code == 200:
                     affil_names = reg_parse_affil_name(resp.content)
                     if affil_names:
+                        affil_names = convert_to_unicode(affil_names)
                         return set([affil_names])
                     else:
                         success_flag = False
@@ -329,7 +396,7 @@ def retrieve_affils_by_urls2(url, search_engine='google'):
                 if resp.status_code == 200:
                     affil_names = reg_parse_affil_name(resp.content)
                     # findall()
-                    return set([affil_names]) if affil_names else set()
+                    return set([convert_to_unicode(affil_names)]) if affil_names else set()
 
                 elif resp.status_code == 429:
                     # Too Many Requests
@@ -542,6 +609,14 @@ def parse_xml(content, dblp_key):
         return set()
 
 
+def convert_to_unicode(_str):
+    # import pdb;pdb.set_trace()
+    try:
+        coding = chardet.detect(_str)['encoding']
+        _str = _str.decode(coding)
+    except Exception, e:
+        print e
+    return _str
 
 
 if __name__ == "__main__":
@@ -579,8 +654,8 @@ if __name__ == "__main__":
     fields_auth_pub = ["dblp_key", "pub_title"]
 
     # create table
-    db.create_table(table_auth_affil, table_description_auth_affil, force=True)
-    db.create_table(table_auth_pub, table_description_auth_pub, force=True)
+    db.create_table(table_auth_affil, table_description_auth_affil, force=False)
+    db.create_table(table_auth_pub, table_description_auth_pub, force=False)
 
 
     # create an XMLReader
@@ -609,4 +684,11 @@ if __name__ == "__main__":
     # docs_set = get_pubs_by_authors(in_file, sys.argv[2])
     # print docs_set
     # print len(docs_set)
+
+    print "#################################"
+    print "############statistics###########"
+    print "#################################"
+    print "# of authors: %s" % Handler.valid_count
+    print "# of valid authors (having affils): %s" % Handler.author_count
+    print "# of valid authors we got pubs: %s" % Handler.auth_pub_count
     print "It's done."

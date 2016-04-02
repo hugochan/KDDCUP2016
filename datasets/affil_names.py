@@ -192,6 +192,8 @@ url_keywords = {'ibm':'ibm', 'yahoo':'yahoo', 'microsoft':'microsoft', 'twitter'
                 'umons':'University of Mons',
                 'unicamp':'UCLA UniCamp',
                 'kennesaw':'Kennesaw State University',
+                'utah edu':'University of Utah',
+                'strath ac uk':'University of Strathclyde',
                 # 'wolfram', 'xerox', 'yandex', 'zynga', 'vtt',
                 # 'teradata', , 'telefonica',
                 #         'thales', ('wellcome', 'trust', 'centre'), ('telecom', 'sudparis'),

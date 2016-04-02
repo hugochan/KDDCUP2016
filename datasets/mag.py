@@ -956,6 +956,8 @@ def retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp'):
 
 
     elif table_name == 'dblp':
+        table_dblp_auth_affil = 'dblp_auth_affil2'
+        table_dblp_auth_pub = 'dblp_auth_pub2'
         try:
             author_name = db.select("name", "authors", where="id='%s'"%author_id, limit=1)
             if not author_name:
@@ -972,9 +974,9 @@ def retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp'):
             else:
                 paper_title = paper_title[0].strip('\r\n. ')
 
-            affil_names = db.select("dblp_auth_affil.affil_name", ["dblp_auth_affil", "dblp_auth_pub"], join_on=["dblp_key", "dblp_key"],
-                    where="(dblp_auth_affil.name='%s' OR dblp_auth_affil.other_names REGEXP '[[:<:]]%s[[:>:]]') AND dblp_auth_pub.pub_title REGEXP '[[:<:]]%s[[:>:]]'"\
-                            %(author_name, author_name, paper_title))
+            affil_names = db.select("%s.affil_name"%table_dblp_auth_affil, [table_dblp_auth_affil, table_dblp_auth_pub], join_on=["dblp_key", "dblp_key"],
+                    where="(%s.name='%s' OR %s.other_names REGEXP '[[:<:]]%s[[:>:]]') AND %s.pub_title REGEXP '[[:<:]]%s[[:>:]]'"\
+                            %(table_dblp_auth_affil, author_name, table_dblp_auth_affil, author_name, table_dblp_auth_pub, paper_title))
 
             if not affil_names:
                 return []
@@ -1012,8 +1014,8 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
     author_name = db.select("name", "authors", where="id='%s'"%author_id, limit=1)[0].strip('\r\n ')
 
     # print author_name
-    table_dblp_auth_affil = 'dblp_auth_affil'
-    table_dblp_auth_pub = 'dblp_auth_pub'
+    table_dblp_auth_affil = 'dblp_auth_affil2'
+    table_dblp_auth_pub = 'dblp_auth_pub2'
 
     if table_name == 'all':
         affil_names1 = db.select("affil_name", table_dblp_auth_affil, where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
