@@ -84,6 +84,8 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
     # choose fixed starting vector if not given
     if nstart is None:
             x=dict.fromkeys(W,scale)
+
+            # x = diff_normalize_vector(x, G)
     else:
             x=nstart
             # normalize starting vector to 1
@@ -160,11 +162,14 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
                     # x[n]+=danglesum+(1-alpha)*pers[n]
 #                   l[n][4]+=danglesum+(1.0-alpha)*pers[n]
 
-            # normalize vector
+            # 1) normalize vector
             s=1.0/sum(x.values())
             for n in x:
                     x[n]*=s
 #                   l[n]*=s
+
+            # 2) normalize vector
+            # x = diff_normalize_vector(x, G)
 
 #           print c[637], ' '.join(map(str,np.round(100*l[637],3))), "\t", \
 #                       c[296], ' '.join(map(str,np.round(100*l[296],3)))
@@ -189,6 +194,29 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
 #   for node in graph.nodes() :
 #       if graph.node[node]["type"]==type :
 #           graph.remove_node(node)
+
+
+def diff_normalize_vector(x, G):
+    s_paper = .0
+    s_author = .0
+    s_affil = .0
+    for k, v in x.iteritems():
+        if G.node[k]['type'] == 'paper':
+            s_paper += v
+        elif G.node[k]['type'] == 'author':
+            s_author += v
+        elif G.node[k]['type'] == 'affil':
+            s_affil += v
+
+    for k in x:
+        if G.node[k]['type'] == 'paper':
+            x[k] = x[k] / s_paper if s_paper > 0 else .0
+        elif G.node[k]['type'] == 'author':
+            x[k] = x[k] / s_author if s_author > 0 else .0
+        elif G.node[k]['type'] == 'affil':
+            x[k] = x[k] / s_affil if s_affil > 0 else .0
+
+    return x
 
 
 def rank_nodes(graph, papers_relev=0.2,
