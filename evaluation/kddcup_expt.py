@@ -163,7 +163,7 @@ def main():
 
             if s.name() == "MultiLayered":
                 s.set_params(**{
-                              'H': 0,
+                              'H': 1,
                               'age_relev': 0.01, # 0.01
                               'papers_relev': .99, # .99
                               'authors_relev': .01, # .01

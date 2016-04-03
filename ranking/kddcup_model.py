@@ -241,7 +241,7 @@ class ModelBuilder:
     return [(u, v, 1.0) for (u, v) in edges]
 
 
-  def get_pubs_layer(self, conf_name, year, n_hops, exclude_list=[], expand_method='conf'):
+  def get_pubs_layer(self, conf_name, year, n_hops, exclude_list=[], expand_method='n_hops'):
     """
     First documents are retrieved from pub records of a targeted conference.
     Then we follow n_hops from these nodes to have the first layer of the graph (papers).
