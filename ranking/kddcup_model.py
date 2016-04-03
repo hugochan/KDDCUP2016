@@ -1204,7 +1204,7 @@ class ModelBuilder:
 
     pubs, citation_edges = self.get_pubs_layer(conf_name, year, n_hops, set(exclude))
     log.debug("%d pubs and %d citation edges." % (len(pubs), len(citation_edges)))
-
+    print "%d pubs and %d citation edges." % (len(pubs), len(citation_edges))
     authors, coauth_edges, auth_edges = self.get_authors_layer(pubs)
     log.debug("%d authors, %d co-authorship edges and %d authorship edges." % (
       len(authors), len(coauth_edges), len(auth_edges)))

@@ -644,20 +644,22 @@ def search_authors(author_name):
     get all the homepages given an author name. author name is not necessarily unique.
     """
     # show all authors
+    # import pdb;pdb.set_trace()
     search_url = "%ssearch?q=%s" % (BASE_URL, '+'.join(author_name.split(' ')))
     resp = requests.get(search_url)
 
     if resp.status_code == 200:
         # get the url of homepage
         # import pdb;pdb.set_trace()
-        if re.search('<em>show all</em>', resp.content):
+        if re.search('<em>show all', resp.content):
             search_url = "%ssearch/author?q=%s" % (BASE_URL, '+'.join(author_name.split(' ')))
             root = lxml.html.parse(search_url)
         else:
             root = lxml.html.fromstring(resp.content)
         # check only exact matches
         if not root.xpath("//div[@id='completesearch-authors']/div/p[text()='Exact matches']"):
-            return []
+            if not root.xpath("//div[@id='completesearch-authors']/div/p[text()='Likely matches']"):
+                return []
 
         authors = root.xpath("//div[@id='completesearch-authors']/div/ul[1]/li")
 
@@ -856,4 +858,6 @@ if __name__ == "__main__":
     # print "# of valid authors (having affils): %s" % Handler.author_count
     # print "# of valid authors we got pubs: %s" % Handler.auth_pub_count
     # print "It's done."
-    print get_dblp_key_by_authnames("Chen Li")
+    dblp_keys = get_dblp_key_by_authnames("Chen Li")
+    print dblp_keys
+    print len(dblp_keys)

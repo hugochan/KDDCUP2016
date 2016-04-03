@@ -978,7 +978,7 @@ def retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp', dbl
 
             except Exception, e:
                 print e
-                # import pdb;pdb.set_trace()
+                import pdb;pdb.set_trace()
                 return []
 
         else:
@@ -1016,7 +1016,7 @@ def retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp', dbl
 
             except Exception, e:
                 print e
-                # import pdb;pdb.set_trace()
+                import pdb;pdb.set_trace()
                 return []
 
 
@@ -1053,9 +1053,14 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
             dblp_keys = get_dblp_key_by_authnames(author_name)
             if dblp_keys:
                 dblp_key_str = ",".join(["'%s'" % each for each in dblp_keys])
-                affil_names = db.select("affil_name", table_dblp_auth_affil, where="dblp_key IN (%s)"%dblp_key_str)
+                try:
+                    affil_names = db.select("affil_name", table_dblp_auth_affil, where="dblp_key IN (%s)"%dblp_key_str)
+                except Exception,e:
+                    print e
+                    import pdb;pdb.set_trace()
             else:
                 print "no dblp_key:%s " % author_name
+
         if affil_names:
             n_author_recall = 1
             # import pdb;pdb.set_trace()
@@ -1064,8 +1069,11 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
             if not dblp_keys:
                 affil_names2 = retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp')
             else:
-                affil_names2 = retrieve_affils_by_author_papers(dblp_keys, paper_id, table_name='dblp', dblp_key=True)
-
+                try:
+                    affil_names2 = retrieve_affils_by_author_papers(dblp_keys, paper_id, table_name='dblp', dblp_key=True)
+                except Exception,e:
+                    print e
+                    import pdb;pdb.set_trace()
 
             if affil_names2:
                 affil_names = affil_names2
@@ -1149,7 +1157,7 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
                     name_of_affil = special_transform[name_of_affil]
 
                 try:
-                    affil_ids = db.select("id", "affils", where="name = %s"%name_of_affil)
+                    affil_ids = db.select("id", "affils", where="name = '%s'"%name_of_affil)
                 except Exception,e:
                     print e
                 if affil_ids:
