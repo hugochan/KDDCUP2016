@@ -4,7 +4,7 @@ Created on Mar 14, 2016
 @author: hugo
 '''
 
-from datasets.mag import get_selected_expand_pubs, retrieve_affils_by_authors
+from datasets.mag import get_selected_expand_pubs
 from ranking.kddcup_ranker import rank_nodes
 import kddcup_model
 import utils

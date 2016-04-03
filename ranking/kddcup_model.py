@@ -1069,49 +1069,94 @@ class ModelBuilder:
     rows = db.select(["paper_id", "author_id", "affil_id"], "paper_author_affils",\
            where="author_id IN (%s) and paper_id IN (%s)"%(author_str, paper_str))
 
-
-    missing_count = 0
-    missing_author = 0
-    hit_count = 0
-    author_affils = defaultdict()
+    count = 0
+    get_affil_count = 0
+    author = set()
+    retrieved_paper_authors = set()
     for paper_id, author_id, affil_id in rows:
-      if affil_id == '':
-        missing_count += 1
-      try:
-        author_affils[author_id].add(affil_id)
-      except:
-        author_affils[author_id] = set([affil_id])
+        if affil_id == '' and not author_id in author:
+            count += 1
+            author.add(author_id)
+        if not affil_id:
+            if not (paper_id, author_id) in retrieved_paper_authors:
+                # print "author id: %s"%author_id
+                # print "paper id: %s"%paper_id
+                # import pdb;pdb.set_trace()
+                # retrieved_affil_ids = None # turn off
+                retrieved_affil_ids, flag = retrieve_affils_by_authors(author_id, table_name='dblp', paper_id=paper_id)
+                if flag == 1:
+                    get_affil_count += 1
+                # retrieved_affil_ids = retrieve_affils_by_author_papers(author_id, paper_id, table_name='csx')
+                if retrieved_affil_ids:
+                    retrieved_paper_authors.add((paper_id, author_id))
+                    # print "retrieved", (paper_id, author_id, retrieved_affil_ids)
+                    #############
+                    # update db
+                    #############
+                    # to do
 
-    for author_id, affil_ids in author_affils.iteritems():
-      # add affil-affil edges
-      # for i in range(len(affil_ids)-1):
-      #   if list(affil_ids)[i] != '':
-      #     for j in range(i+1,len(affil_ids)):
-      #       if list(affil_ids)[j] != '':
-      #         affil_affil_edges.add((list(affil_ids)[i], list(affil_ids)[j], 1.0))
+                    affil_id = set(retrieved_affil_ids)
+                else:
+                    # skip this record
+                    continue
+            else:
+                continue
 
+            # continue
 
-      for each in affil_ids:
-        if each != '':
-          affils.add(each)
-          author_affil_edges.add((author_id, each, 1.0))
         else:
-          # To be improved, we only retrieve affils
-          # when we don't know any affils which the author belongs to
-          if len(affil_ids) == 1:
-            # import pdb;pdb.set_trace()
-            missing_author += 1
-            # we check external data (e.g., csx dataset) and do string matching which is knotty.
-            match_affil_ids, _ = retrieve_affils_by_authors(author_id, table_name='dblp')
-            if match_affil_ids:
-              hit_count += 1
-            for each_affil in match_affil_ids:
-              affils.add(each_affil)
-              author_affil_edges.add((author_id, each_affil, 1.0))
+            affil_id = set([affil_id])
 
-    print "missing count: %s"%missing_count
-    print "missing author: %s"%missing_author
-    print "hit count: %s"%hit_count
+        author.add(author_id)
+        for each_affil in affil_id:
+            affils.add(each_affil)
+            author_affil_edges.add((author_id, each_affil, 1.0))
+
+    print "missing author: %s/%s"%(count, len(author))
+    print "get_affil_count: %s"%get_affil_count
+
+    # missing_count = 0
+    # missing_author = 0
+    # hit_count = 0
+    # author_affils = defaultdict()
+    # for paper_id, author_id, affil_id in rows:
+    #   if affil_id == '':
+    #     missing_count += 1
+    #   try:
+    #     author_affils[author_id].add(affil_id)
+    #   except:
+    #     author_affils[author_id] = set([affil_id])
+
+    # for author_id, affil_ids in author_affils.iteritems():
+    #   # add affil-affil edges
+    #   # for i in range(len(affil_ids)-1):
+    #   #   if list(affil_ids)[i] != '':
+    #   #     for j in range(i+1,len(affil_ids)):
+    #   #       if list(affil_ids)[j] != '':
+    #   #         affil_affil_edges.add((list(affil_ids)[i], list(affil_ids)[j], 1.0))
+
+
+    #   for each in affil_ids:
+    #     if each != '':
+    #       affils.add(each)
+    #       author_affil_edges.add((author_id, each, 1.0))
+    #     else:
+    #       # To be improved, we only retrieve affils
+    #       # when we don't know any affils which the author belongs to
+    #       if len(affil_ids) == 1:
+    #         # import pdb;pdb.set_trace()
+    #         missing_author += 1
+    #         # we check external data (e.g., csx dataset) and do string matching which is knotty.
+    #         match_affil_ids, _ = retrieve_affils_by_authors(author_id, table_name='dblp')
+    #         if match_affil_ids:
+    #           hit_count += 1
+    #         for each_affil in match_affil_ids:
+    #           affils.add(each_affil)
+    #           author_affil_edges.add((author_id, each_affil, 1.0))
+
+    # print "missing count: %s"%missing_count
+    # print "missing author: %s"%missing_author
+    # print "hit count: %s"%hit_count
 
     # # count = 0
     # tmp_authors = set()
@@ -1146,7 +1191,7 @@ class ModelBuilder:
     #     author_affil_edges.add((author_id, affil_id, 1.0))
 
 
-    print len(affils), len(author_affil_edges), len(affil_affil_edges)
+    # print len(affils), len(author_affil_edges), len(affil_affil_edges)
     return list(affils), list(author_affil_edges), list(affil_affil_edges)
 
 

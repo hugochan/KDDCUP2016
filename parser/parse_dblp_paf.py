@@ -8,9 +8,10 @@ An event-driven parser which parses paper-author-affil relationship
 import requests
 import xml.sax
 import xml.dom.minidom
+import lxml.html
+import lxml.etree
 from mymysql.mymysql import MyMySQL
 from datasets.affil_names import url_keywords
-from datasets.mag import reg_parse_affil_name
 import config
 import subprocess
 import sys
@@ -48,6 +49,29 @@ homepage_pattern2 = 'hd/(\S)+"'
 homepage_prog1 = re.compile(homepage_pattern1)
 homepage_prog2 = re.compile(homepage_pattern2)
 # alltags = set()
+
+
+
+
+# regexp patterns
+univ_academy_pattern = '([A-Z][^\\s,.:;>]+[.]?\\s[(]?)*(University|Universidade|Academy|Council)[^,<;:.\\d]*(?=,|\\d|;|<|:|-|\\.)'
+institute_pattern = '([A-Z][^\\s,.:;>]+[.]?\\s[(]?)*(Institute)[^,<;:.\\d]*(?=,|\\d|;|<|:|-|\\.)'
+college_pattern = '([A-Z][^\\s,.:;>]+[.]?\\s[(]?)*(College|Centre|Center)[^,<;:.\\d]*(?=,|\\d|;|<|:|-|\\.)'
+
+univ_academy_pattern2 = '([A-Z][^\\s,.:;>]+[.]?\\s[(]?)*(University|Universidade|Academy|Council)[^,<;:.\\d]*$'
+institute_pattern2 = '([A-Z][^\\s,.:;>]+[.]?\\s[(]?)*(Institute)[^,<;:.\\d]*$'
+college_pattern2 = '([A-Z][^\\s,.:;>]+[.]?\\s[(]?)*(College|Centre|Center)[^,<;:.\\d]*$'
+
+
+univ_academy_prog = re.compile(univ_academy_pattern)
+institute_prog = re.compile(institute_pattern)
+college_prog = re.compile(college_pattern)
+
+univ_academy_prog2 = re.compile(univ_academy_pattern2)
+institute_prog2 = re.compile(institute_pattern2)
+college_prog2 = re.compile(college_pattern2)
+
+
 
 # All tags we have in dblp.xml
 # [u'www', u'isbn', u'ee', u'series', u'number', u'month', u'mastersthesis', u'year', u'sub', u'title', u'incollection', u'booktitle', u'note', u'book', u'editor', u'sup', u'cite', u'journal', u'volume', u'address', u'cdrom', u'article', u'pages', u'crossref', u'chapter', u'publisher', u'school', u'phdthesis', u'dblp', u'inproceedings', u'i', u'author', u'url', u'proceedings', u'tt']
@@ -502,11 +526,17 @@ def get_pubs_by_authors(author_name, dblp_key):
         return set()
 
 def search_homepages(author_name):
+    """
+    get the exact homepage given a distinct author name.
+    Users should make sure the author name is unique as
+    the method only returns the first matching.
+    """
     search_url = "%ssearch?q=%s" % (BASE_URL, '+'.join(author_name.split(' ')))
     resp = requests.get(search_url)
     # import pdb;pdb.set_trace()
     if resp.status_code == 200:
         # get the url of homepage
+        import pdb;pdb.set_trace()
         rst = homepage_prog1.search(resp.content)
         if rst:
             rst = homepage_prog2.search(rst.group(0))
@@ -609,6 +639,112 @@ def parse_xml(content, dblp_key):
         return set()
 
 
+def search_authors(author_name):
+    """
+    get all the homepages given an author name. author name is not necessarily unique.
+    """
+    # show all authors
+    search_url = "%ssearch?q=%s" % (BASE_URL, '+'.join(author_name.split(' ')))
+    resp = requests.get(search_url)
+
+    if resp.status_code == 200:
+        # get the url of homepage
+        # import pdb;pdb.set_trace()
+        if re.search('<em>show all</em>', resp.content):
+            search_url = "%ssearch/author?q=%s" % (BASE_URL, '+'.join(author_name.split(' ')))
+            root = lxml.html.parse(search_url)
+        else:
+            root = lxml.html.fromstring(resp.content)
+        # check only exact matches
+        if not root.xpath("//div[@id='completesearch-authors']/div/p[text()='Exact matches']"):
+            return []
+
+        authors = root.xpath("//div[@id='completesearch-authors']/div/ul[1]/li")
+
+        homepages = []
+
+        for each_author in authors:
+            rst = homepage_prog1.search(lxml.etree.tostring(each_author))
+            if rst:
+                rst = homepage_prog2.search(rst.group(0))
+                if rst:
+                    partital_url = rst.group(0).replace('hd/','').replace('"','')
+                    url = "%spers/xx/%s.xml" % (BASE_URL, partital_url)
+                    resp = requests.get(url)
+
+                    if resp.status_code == 200:
+                        # import pdb;pdb.set_trace()
+                        homepages.append(resp.content)
+
+                    elif resp.status_code == 404:
+                        # The page is not found
+                        # Searches homepage directly by author name
+                        # print "failed to find author: %s (cannot find the homepage.)" % (author_name)
+                        pass
+
+                    elif resp.status_code == 429:
+                        # Too Many Requests
+                        try:
+                            # print resp.headers
+                            twait = int(resp.headers["Retry-After"])
+                        except Exception, e:
+                            print e
+                            twait = 30 # default
+
+                        time.sleep(twait)
+                        print 'wait %s seconds. Retry...' % twait
+
+                        return search_authors(author_name)
+
+            # print "failed to find author: %s (unknown reasons.)" % (author_name)
+        return homepages
+
+    elif resp.status_code == 404:
+        print "search API does not work currently."
+        return []
+
+    elif resp.status_code == 429:
+        # Too Many Requests
+        try:
+            # print resp.headers
+            twait = int(resp.headers["Retry-After"])
+        except Exception, e:
+            print e
+            twait = 30 # default
+
+        time.sleep(twait)
+        print 'wait %s seconds. Retry...' % twait
+
+        return search_authors(author_name)
+
+    else:
+        return []
+
+
+def get_dblp_key_by_authnames(author_name):
+    """
+    get author's dblp key by the name
+    """
+
+    # return all the authors having that name
+    homepages = search_authors(author_name)
+    dblp_keys = set()
+    for each in homepages:
+        try:
+            DOMTree = xml.dom.minidom.parseString(each)
+        except Exception, e:
+            print e
+            return ""
+
+        dblp_person = DOMTree.documentElement
+        # checks if this is exactlly the wanted homepage using dblp key
+        person = dblp_person.getElementsByTagName("person")
+        if person and person[0].hasAttribute("key"):
+            dblp_keys.add(person[0].getAttribute("key"))
+
+    return dblp_keys
+
+
 def convert_to_unicode(_str):
     # import pdb;pdb.set_trace()
     try:
@@ -619,76 +755,105 @@ def convert_to_unicode(_str):
     return _str
 
 
+def reg_parse_affil_name(affil_name):
+    normal_affil_name = affil_name.title().replace('Univ.', 'University')\
+                .replace('Umversity', 'University').replace('Universit', 'University')\
+                .replace('Universityy', 'University') # low-prob case
+
+    # try matching university and academy
+    rst = univ_academy_prog.search(normal_affil_name)
+    if not rst:
+        rst = institute_prog.search(normal_affil_name)
+        if not rst:
+            rst = college_prog.search(normal_affil_name)
+            if not rst:
+                rst = univ_academy_prog2.search(normal_affil_name)
+                if not rst:
+                    rst = institute_prog2.search(normal_affil_name)
+                    if not rst:
+                        rst = college_prog2.search(normal_affil_name)
+                        if not rst:
+                            # print each_affil_name
+                            # import pdb;pdb.set_trace()
+                            return ''
+
+    name_of_affil = rst.group(0).replace('-', ' ').replace('The', '')\
+                            .replace('(', '').replace(')', '').strip()
+    name_of_affil = ' '.join(name_of_affil.split()) # a stupid way to merge multiple space chars to a single one
+    return name_of_affil
+
+
 if __name__ == "__main__":
-    try:
-        in_file = sys.argv[1]
-    except Exception, e:
-        print e
-        sys.exit()
+    # try:
+    #     in_file = sys.argv[1]
+    # except Exception, e:
+    #     print e
+    #     sys.exit()
 
-    total_lineno = file_len(in_file)
-    print "total line num of the file: %s\n" % total_lineno
+    # total_lineno = file_len(in_file)
+    # print "total line num of the file: %s\n" % total_lineno
 
-    # db info
-    # table 1)
-    table_description_auth_affil = ['id INT NOT NULL AUTO_INCREMENT',
-                        'dblp_key VARCHAR(200) NOT NULL',
-                        'name VARCHAR(200) NOT NULL',
-                        'other_names VARCHAR(1000)',
-                        'affil_name VARCHAR(200)',
-                        'PRIMARY KEY (id)',
-                        'KEY (dblp_key)',
-                        'KEY (name)']
+    # # db info
+    # # table 1)
+    # table_description_auth_affil = ['id INT NOT NULL AUTO_INCREMENT',
+    #                     'dblp_key VARCHAR(200) NOT NULL',
+    #                     'name VARCHAR(200) NOT NULL',
+    #                     'other_names VARCHAR(1000)',
+    #                     'affil_name VARCHAR(200)',
+    #                     'PRIMARY KEY (id)',
+    #                     'KEY (dblp_key)',
+    #                     'KEY (name)']
 
-    table_auth_affil = "dblp_auth_affil2"
-    fields_auth_affil = ["dblp_key", "name", "other_names", "affil_name"]
+    # table_auth_affil = "dblp_auth_affil2"
+    # fields_auth_affil = ["dblp_key", "name", "other_names", "affil_name"]
 
-    # table 2)
-    table_description_auth_pub = ['id INT NOT NULL AUTO_INCREMENT',
-                        'dblp_key VARCHAR(200) NOT NULL',
-                        'pub_title VARCHAR(300) NOT NULL',
-                        'PRIMARY KEY (id)',
-                        'KEY (dblp_key)']
+    # # table 2)
+    # table_description_auth_pub = ['id INT NOT NULL AUTO_INCREMENT',
+    #                     'dblp_key VARCHAR(200) NOT NULL',
+    #                     'pub_title VARCHAR(300) NOT NULL',
+    #                     'PRIMARY KEY (id)',
+    #                     'KEY (dblp_key)']
 
-    table_auth_pub = "dblp_auth_pub2"
-    fields_auth_pub = ["dblp_key", "pub_title"]
+    # table_auth_pub = "dblp_auth_pub2"
+    # fields_auth_pub = ["dblp_key", "pub_title"]
 
-    # create table
-    db.create_table(table_auth_affil, table_description_auth_affil, force=False)
-    db.create_table(table_auth_pub, table_description_auth_pub, force=False)
-
-
-    # create an XMLReader
-    parser = xml.sax.make_parser()
-    locator = xml.sax.expatreader.ExpatLocator(parser)
-    # turn off namepsaces
-    parser.setFeature(xml.sax.handler.feature_namespaces, 0)
-    # override the default ContextHandler
-    Handler = DBLPHandler(locator, table_auth_affil, fields_auth_affil, table_auth_pub, fields_auth_pub)
-    parser.setContentHandler(Handler)
+    # # create table
+    # db.create_table(table_auth_affil, table_description_auth_affil, force=False)
+    # db.create_table(table_auth_pub, table_description_auth_pub, force=False)
 
 
-    parser.parse(in_file)
+    # # create an XMLReader
+    # parser = xml.sax.make_parser()
+    # locator = xml.sax.expatreader.ExpatLocator(parser)
+    # # turn off namepsaces
+    # parser.setFeature(xml.sax.handler.feature_namespaces, 0)
+    # # override the default ContextHandler
+    # Handler = DBLPHandler(locator, table_auth_affil, fields_auth_affil, table_auth_pub, fields_auth_pub)
+    # parser.setContentHandler(Handler)
 
-    # write remaining data into db
-    if auth_affil_bulk:
-        db.insert(into=table_auth_affil, fields=fields_auth_affil, values=list(auth_affil_bulk), ignore=True)
-        # pass
 
-    if auth_pub_bulk:
-        db.insert(into=table_auth_pub, fields=fields_auth_pub, values=list(auth_pub_bulk), ignore=True)
-        # pass
+    # parser.parse(in_file)
 
-    # print len(alltags)
+    # # write remaining data into db
+    # if auth_affil_bulk:
+    #     db.insert(into=table_auth_affil, fields=fields_auth_affil, values=list(auth_affil_bulk), ignore=True)
+    #     # pass
 
-    # docs_set = get_pubs_by_authors(in_file, sys.argv[2])
-    # print docs_set
-    # print len(docs_set)
+    # if auth_pub_bulk:
+    #     db.insert(into=table_auth_pub, fields=fields_auth_pub, values=list(auth_pub_bulk), ignore=True)
+    #     # pass
 
-    print "#################################"
-    print "############statistics###########"
-    print "#################################"
-    print "# of authors: %s" % Handler.valid_count
-    print "# of valid authors (having affils): %s" % Handler.author_count
-    print "# of valid authors we got pubs: %s" % Handler.auth_pub_count
-    print "It's done."
+    # # print len(alltags)
+
+    # # docs_set = get_pubs_by_authors(in_file, sys.argv[2])
+    # # print docs_set
+    # # print len(docs_set)
+
+    # print "#################################"
+    # print "############statistics###########"
+    # print "#################################"
+    # print "# of authors: %s" % Handler.valid_count
+    # print "# of valid authors (having affils): %s" % Handler.author_count
+    # print "# of valid authors we got pubs: %s" % Handler.auth_pub_count
+    # print "It's done."
+    print get_dblp_key_by_authnames("Chen Li")
