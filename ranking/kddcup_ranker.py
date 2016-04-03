@@ -168,8 +168,10 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
                     x[n]*=s
 #                   l[n]*=s
 
-            # 2) normalize vector
+            # 2) normalize vector (makes no sense)
             # x = diff_normalize_vector(x, G)
+
+
 
 #           print c[637], ' '.join(map(str,np.round(100*l[637],3))), "\t", \
 #                       c[296], ' '.join(map(str,np.round(100*l[296],3)))
@@ -182,6 +184,13 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
                     raise Exception('pagerank: power iteration failed to converge '
                                                             'in %d iterations.'%(i-1))
             i+=1
+
+
+            # # 3) inflation (hard to convergence)
+            # r = 1.01
+            # new = np.array(x.values())**r
+            # x = dict(zip(x.keys(), new/sum(new)))
+
 
     # Returns:
     #   x: PageRank of each node;
