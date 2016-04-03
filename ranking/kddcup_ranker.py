@@ -156,7 +156,7 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
 
                     #             x[n] += params['authors_relev']*(1-alpha)*vv*xlast[kk]
 
-                    x[n]+=danglesum+(1-alpha)*np.array(pers.values()).dot(np.array(xlast.values()))
+                    x[n]+=danglesum+(1-alpha)*pers[n]
                     # x[n]+=danglesum+(1-alpha)*pers[n]
 #                   l[n][4]+=danglesum+(1.0-alpha)*pers[n]
 
