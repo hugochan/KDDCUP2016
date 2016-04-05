@@ -11,7 +11,7 @@ import re
 import config
 import chardet
 from datasets.affil_names import *
-from parser.parse_dblp_paf import get_dblp_key_by_authnames, reg_parse_affil_name, search_affils_by_author_paper
+from parser.parse_dblp_paf import get_dblp_key_by_author_paper, reg_parse_affil_name, search_affils_by_author_paper
 
 
 db = MyMySQL(config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
@@ -1046,6 +1046,7 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
 
     # print author_name
     table_dblp_auth_affil = 'dblp_auth_affil2'
+    table_dblp_auth_affil_ext = 'dblp_auth_affil_ext'
     table_dblp_auth_pub = 'dblp_auth_pub2'
 
     if table_name == 'all':
@@ -1062,9 +1063,22 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
         if not affil_names:
             paper_title = get_paper_title_by_id(paper_id)
             if paper_title:
+                dblp_key = get_dblp_key_by_author_paper(author_name, paper_title)
+                affil_names = db.select("affil_name", table_dblp_auth_affil_ext, where="dblp_key='%s'"%dblp_key)
+
+        if not affil_names:
+            if paper_title:
                 dblp_key, affil_names = search_affils_by_author_paper(author_name, paper_title)
                 if affil_names:
                     print 'get %s - %s affils online'%(dblp_key, author_name)
+                    # write to db
+                    for each in affil_names:
+                        try:
+                            db.insert(into=table_dblp_auth_affil_ext, fields=["dblp_key", "name", "other_names", "affil_name"],\
+                                values=[(dblp_key, author_name, '', each)], ignore=True)
+                        except Exception, e:
+                            print e
+                            import pdb;pdb.set_trace()
             # dblp_keys = get_dblp_key_by_authnames(author_name)
             # if dblp_keys:
             #     dblp_key_str = ",".join(["'%s'" % each for each in dblp_keys])

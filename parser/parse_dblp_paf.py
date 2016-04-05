@@ -755,19 +755,50 @@ def search_affils_by_author_paper(author_name, paper_title):
 
                     if resp.status_code == 200:
                         try:
-                            tmp = re.search('<a (\s*) href=(.*)%s</a>'%author_name.title(), resp.content).group()
-                            url = re.findall('href="(.*)"(\s*)title', tmp)[0][0]
-                            resp = requests.get("http://dl.acm.org/%s" % url)
+                            # import pdb;pdb.set_trace()
+                            root = lxml.html.fromstring(resp.content)
+                            href = root.xpath("//tr/td/a[text()='%s']"%author_name.title())
+                            if not href: # not matched probably because the author name has special char (e.g., European char)
+                                for each_part_of_name in author_name.title():
+                                    # href_set = set()
+                                    href = root.xpath("//tr/td/a[contains(text(), '%s')]"%each_part_of_name)
+                                    if len(href) == 1:
+                                        break
+                                    else:
+                                        href = []
+                                        continue
 
+                            if not href:
+                                break
+
+                            tr = href[0].getparent().getparent()
+                            # 1)
+                            if tr.xpath("td/small"):
+                                affil_name = tr.xpath("td/small")[0].text
+                                affils.add(affil_name)
+                            elif tr.xpath('td/a/small'):
+                                affil_name = tr.xpath('td/a/small')[0].text
+                                affils.add(affil_name)
+                            # tmp = re.search('<a (\s*) href=(.*)%s</a>'%author_name.title(), resp.content).group()
+                            # url = re.findall('href="(.*)"(\s*)title', tmp)[0][0]
+                            resp = requests.get("http://dl.acm.org/%s" % href[0].attrib['href'])
+
+                        except Exception, e:
+                            print e
+                            import pdb;pdb.set_trace()
+                            break
+
+                        else:
                             if resp.status_code == 200:
                                 try:
                                     root = lxml.html.fromstring(resp.content)
-                                    strong = root.xpath("//td/strong[text()='Affiliation history']")[0]
-                                    td = strong.getparent()
+                                    strong = root.xpath("//td/strong[text()='Affiliation history']")
+                                    if strong:
+                                        td = strong[0].getparent()
 
-                                    for each in td.xpath("div/a"):
-                                        affils.add(each.text)
-                                    break
+                                        for each in td.xpath("div/a"):
+                                            affils.add(each.text)
+                                        break
 
                                 except Exception, e:
                                     print e
@@ -794,11 +825,6 @@ def search_affils_by_author_paper(author_name, paper_title):
 
                             else:
                                 break
-
-                        except Exception, e:
-                            print e
-                            # import pdb;pdb.set_trace()
-                            break
 
                     elif resp.status_code == 404:
                         print "search API does not work currently."
@@ -834,28 +860,30 @@ def search_affils_by_author_paper(author_name, paper_title):
 
 
 
-def get_dblp_key_by_authnames(author_name):
+def get_dblp_key_by_author_paper(author_name, paper_title):
     """
     get author's dblp key by the name
     """
 
     # return all the authors having that name
     homepages = search_authors(author_name)
-    dblp_keys = set()
     for each in homepages:
         try:
             DOMTree = xml.dom.minidom.parseString(each)
         except Exception, e:
             print e
-            return ""
+            return ''
 
         dblp_person = DOMTree.documentElement
-        # checks if this is exactlly the wanted homepage using dblp key
-        person = dblp_person.getElementsByTagName("person")
-        if person and person[0].hasAttribute("key"):
-            dblp_keys.add(person[0].getAttribute("key"))
-
-    return dblp_keys
+        pub = [x for x in dblp_person.getElementsByTagName('title') if x.firstChild.nodeValue and x.firstChild.nodeValue.strip('. ') == paper_title.strip('. ')]
+        if pub: # matched
+            # get dblp_key
+            person = dblp_person.getElementsByTagName("person")
+            if person and person[0].hasAttribute("key"):
+                dblp_key = person[0].getAttribute("key")
+                if dblp_key:
+                    return dblp_key
+    return ''
 
 
 def convert_to_unicode(_str):
@@ -903,76 +931,76 @@ if __name__ == "__main__":
         print e
         sys.exit()
 
-    # total_lineno = file_len(in_file)
-    # print "total line num of the file: %s\n" % total_lineno
+    total_lineno = file_len(in_file)
+    print "total line num of the file: %s\n" % total_lineno
 
-    # # db info
-    # # table 1)
-    # table_description_auth_affil = ['id INT NOT NULL AUTO_INCREMENT',
-    #                     'dblp_key VARCHAR(200) NOT NULL',
-    #                     'name VARCHAR(200) NOT NULL',
-    #                     'other_names VARCHAR(1000)',
-    #                     'affil_name VARCHAR(200)',
-    #                     'PRIMARY KEY (id)',
-    #                     'KEY (dblp_key)',
-    #                     'KEY (name)']
+    # db info
+    # table 1)
+    table_description_auth_affil = ['id INT NOT NULL AUTO_INCREMENT',
+                        'dblp_key VARCHAR(200) NOT NULL',
+                        'name VARCHAR(200) NOT NULL',
+                        'other_names VARCHAR(1000)',
+                        'affil_name VARCHAR(200)',
+                        'PRIMARY KEY (id)',
+                        'KEY (dblp_key)',
+                        'KEY (name)']
 
-    # table_auth_affil = "dblp_auth_affil_test"
-    # fields_auth_affil = ["dblp_key", "name", "other_names", "affil_name"]
+    table_auth_affil = "dblp_auth_affil_ext"
+    fields_auth_affil = ["dblp_key", "name", "other_names", "affil_name"]
 
-    # # table 2)
-    # table_description_auth_pub = ['id INT NOT NULL AUTO_INCREMENT',
-    #                     'dblp_key VARCHAR(200) NOT NULL',
-    #                     'pub_title VARCHAR(300) NOT NULL',
-    #                     'PRIMARY KEY (id)',
-    #                     'KEY (dblp_key)']
+    # table 2)
+    table_description_auth_pub = ['id INT NOT NULL AUTO_INCREMENT',
+                        'dblp_key VARCHAR(200) NOT NULL',
+                        'pub_title VARCHAR(300) NOT NULL',
+                        'PRIMARY KEY (id)',
+                        'KEY (dblp_key)']
 
-    # table_auth_pub = "dblp_auth_pub_test"
-    # fields_auth_pub = ["dblp_key", "pub_title"]
+    table_auth_pub = "dblp_auth_pub_ext"
+    fields_auth_pub = ["dblp_key", "pub_title"]
 
-    # # create table
-    # db.create_table(table_auth_affil, table_description_auth_affil, force=False)
-    # db.create_table(table_auth_pub, table_description_auth_pub, force=False)
-
-
-    # # create an XMLReader
-    # parser = xml.sax.make_parser()
-    # locator = xml.sax.expatreader.ExpatLocator(parser)
-    # # turn off namepsaces
-    # parser.setFeature(xml.sax.handler.feature_namespaces, 0)
-    # # override the default ContextHandler
-    # Handler = DBLPHandler(locator, table_auth_affil, fields_auth_affil, table_auth_pub, fields_auth_pub)
-    # parser.setContentHandler(Handler)
+    # create table
+    db.create_table(table_auth_affil, table_description_auth_affil, force=False)
+    db.create_table(table_auth_pub, table_description_auth_pub, force=False)
 
 
-    # parser.parse(in_file)
-
-    # # write remaining data into db
-    # if auth_affil_bulk:
-    #     db.insert(into=table_auth_affil, fields=fields_auth_affil, values=list(auth_affil_bulk), ignore=True)
-    #     # pass
-
-    # if auth_pub_bulk:
-    #     db.insert(into=table_auth_pub, fields=fields_auth_pub, values=list(auth_pub_bulk), ignore=True)
-    #     # pass
-
-    # # print len(alltags)
-
-    # # docs_set = get_pubs_by_authors(in_file, sys.argv[2])
-    # # print docs_set
-    # # print len(docs_set)
-
-    # print "#################################"
-    # print "############statistics###########"
-    # print "#################################"
-    # print "# of authors: %s" % Handler.valid_count
-    # print "# of valid authors (having affils): %s" % Handler.author_count
-    # print "# of valid authors we got pubs: %s" % Handler.auth_pub_count
-    # print "It's done."
-    # # dblp_keys = get_dblp_key_by_authnames("Chen Li")
-    # # print dblp_keys
-    # # print len(dblp_keys)
+    # create an XMLReader
+    parser = xml.sax.make_parser()
+    locator = xml.sax.expatreader.ExpatLocator(parser)
+    # turn off namepsaces
+    parser.setFeature(xml.sax.handler.feature_namespaces, 0)
+    # override the default ContextHandler
+    Handler = DBLPHandler(locator, table_auth_affil, fields_auth_affil, table_auth_pub, fields_auth_pub)
+    parser.setContentHandler(Handler)
 
 
-    affils = search_affils_by_author_paper(in_file, 'PIPLEX: tangible experience in an augmented reality video game.')
-    print affils
+    parser.parse(in_file)
+
+    # write remaining data into db
+    if auth_affil_bulk:
+        db.insert(into=table_auth_affil, fields=fields_auth_affil, values=list(auth_affil_bulk), ignore=True)
+        # pass
+
+    if auth_pub_bulk:
+        db.insert(into=table_auth_pub, fields=fields_auth_pub, values=list(auth_pub_bulk), ignore=True)
+        # pass
+
+    # print len(alltags)
+
+    # docs_set = get_pubs_by_authors(in_file, sys.argv[2])
+    # print docs_set
+    # print len(docs_set)
+
+    print "#################################"
+    print "############statistics###########"
+    print "#################################"
+    print "# of authors: %s" % Handler.valid_count
+    print "# of valid authors (having affils): %s" % Handler.author_count
+    print "# of valid authors we got pubs: %s" % Handler.auth_pub_count
+    print "It's done."
+    # dblp_keys = get_dblp_key_by_authnames("Chen Li")
+    # print dblp_keys
+    # print len(dblp_keys)
+
+
+    # affils = search_affils_by_author_paper("Jianshu Weng", 'Exploiting hybrid contexts for Tweet segmentation')
+    # print affils
