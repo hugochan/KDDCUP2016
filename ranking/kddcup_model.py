@@ -1081,7 +1081,7 @@ class ModelBuilder:
             if not (paper_id, author_id) in retrieved_paper_authors:
                 # print "author id: %s"%author_id
                 # print "paper id: %s"%paper_id
-                # import pdb;pdb.set_trace()
+                import pdb;pdb.set_trace()
                 # retrieved_affil_ids = None # turn off
                 retrieved_affil_ids, flag = retrieve_affils_by_authors(author_id, table_name='dblp', paper_id=paper_id)
                 if flag == 1:

@@ -536,7 +536,7 @@ def search_homepages(author_name):
     # import pdb;pdb.set_trace()
     if resp.status_code == 200:
         # get the url of homepage
-        import pdb;pdb.set_trace()
+        # import pdb;pdb.set_trace()
         rst = homepage_prog1.search(resp.content)
         if rst:
             rst = homepage_prog2.search(rst.group(0))
@@ -722,6 +722,117 @@ def search_authors(author_name):
     else:
         return []
 
+def search_affils_by_author_paper(author_name, paper_title):
+    """
+    get author's affils by author name and paper title
+    """
+
+    dblp_key = ''
+    affils = set()
+    # return all the authors having that name
+    homepages = search_authors(author_name)
+    # import pdb;pdb.set_trace()
+    for each in homepages:
+        try:
+            DOMTree = xml.dom.minidom.parseString(each)
+        except Exception, e:
+            print e
+            return ""
+
+        dblp_person = DOMTree.documentElement
+        pub = [x for x in dblp_person.getElementsByTagName('title') if x.firstChild.nodeValue and x.firstChild.nodeValue.strip('. ') == paper_title.strip('. ')]
+        if pub: # matched
+            # get dblp_key
+            person = dblp_person.getElementsByTagName("person")
+            if person and person[0].hasAttribute("key"):
+                dblp_key = person[0].getAttribute("key")
+
+            ee = pub[0].parentNode.getElementsByTagName('ee')
+            if ee:
+                url = ee[0].firstChild.nodeValue
+                if 'acm' in url.split('.'): # acm digital library
+                    resp = requests.get(url)
+
+                    if resp.status_code == 200:
+                        try:
+                            tmp = re.search('<a (\s*) href=(.*)%s</a>'%author_name.title(), resp.content).group()
+                            url = re.findall('href="(.*)"(\s*)title', tmp)[0][0]
+                            resp = requests.get("http://dl.acm.org/%s" % url)
+
+                            if resp.status_code == 200:
+                                try:
+                                    root = lxml.html.fromstring(resp.content)
+                                    strong = root.xpath("//td/strong[text()='Affiliation history']")[0]
+                                    td = strong.getparent()
+
+                                    for each in td.xpath("div/a"):
+                                        affils.add(each.text)
+                                    break
+
+                                except Exception, e:
+                                    print e
+                                    import pdb;pdb.set_trace()
+                                    break
+
+                            elif resp.status_code == 404:
+                                print "search API does not work currently."
+                                break
+
+                            elif resp.status_code == 429:
+                                # Too Many Requests
+                                try:
+                                    # print resp.headers
+                                    twait = int(resp.headers["Retry-After"])
+                                except Exception, e:
+                                    print e
+                                    twait = 30 # default
+
+                                time.sleep(twait)
+                                print 'wait %s seconds. Retry...' % twait
+
+                                return search_affils_by_author_paper(author_name, paper_title)
+
+                            else:
+                                break
+
+                        except Exception, e:
+                            print e
+                            # import pdb;pdb.set_trace()
+                            break
+
+                    elif resp.status_code == 404:
+                        print "search API does not work currently."
+                        break
+
+                    elif resp.status_code == 429:
+                        # Too Many Requests
+                        try:
+                            # print resp.headers
+                            twait = int(resp.headers["Retry-After"])
+                        except Exception, e:
+                            print e
+                            twait = 30 # default
+
+                        time.sleep(twait)
+                        print 'wait %s seconds. Retry...' % twait
+
+                        return search_affils_by_author_paper(author_name, paper_title)
+                    else:
+                        break
+
+
+                elif 'doi' in url.split('.'):
+                    pass
+                else:
+                    break
+            else:
+                break
+        else:
+            continue
+
+    return dblp_key, affils
+
+
 
 def get_dblp_key_by_authnames(author_name):
     """
@@ -786,11 +897,11 @@ def reg_parse_affil_name(affil_name):
 
 
 if __name__ == "__main__":
-    # try:
-    #     in_file = sys.argv[1]
-    # except Exception, e:
-    #     print e
-    #     sys.exit()
+    try:
+        in_file = sys.argv[1]
+    except Exception, e:
+        print e
+        sys.exit()
 
     # total_lineno = file_len(in_file)
     # print "total line num of the file: %s\n" % total_lineno
@@ -806,7 +917,7 @@ if __name__ == "__main__":
     #                     'KEY (dblp_key)',
     #                     'KEY (name)']
 
-    # table_auth_affil = "dblp_auth_affil2"
+    # table_auth_affil = "dblp_auth_affil_test"
     # fields_auth_affil = ["dblp_key", "name", "other_names", "affil_name"]
 
     # # table 2)
@@ -816,7 +927,7 @@ if __name__ == "__main__":
     #                     'PRIMARY KEY (id)',
     #                     'KEY (dblp_key)']
 
-    # table_auth_pub = "dblp_auth_pub2"
+    # table_auth_pub = "dblp_auth_pub_test"
     # fields_auth_pub = ["dblp_key", "pub_title"]
 
     # # create table
@@ -858,6 +969,10 @@ if __name__ == "__main__":
     # print "# of valid authors (having affils): %s" % Handler.author_count
     # print "# of valid authors we got pubs: %s" % Handler.auth_pub_count
     # print "It's done."
-    dblp_keys = get_dblp_key_by_authnames("Chen Li")
-    print dblp_keys
-    print len(dblp_keys)
+    # # dblp_keys = get_dblp_key_by_authnames("Chen Li")
+    # # print dblp_keys
+    # # print len(dblp_keys)
+
+
+    affils = search_affils_by_author_paper(in_file, 'PIPLEX: tangible experience in an augmented reality video game.')
+    print affils

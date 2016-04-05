@@ -11,7 +11,7 @@ import re
 import config
 import chardet
 from datasets.affil_names import *
-from parser.parse_dblp_paf import get_dblp_key_by_authnames, reg_parse_affil_name
+from parser.parse_dblp_paf import get_dblp_key_by_authnames, reg_parse_affil_name, search_affils_by_author_paper
 
 
 db = MyMySQL(config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
@@ -1023,6 +1023,15 @@ def retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp', dbl
     else:
         raise ValueError("Unknown value of parameter table_name. Parameter table_name should either be 'dblp' or 'csx'.")
 
+def get_paper_title_by_id(paper_id):
+    paper_title = db.select("title", "selected_papers", where="id='%s'"%paper_id, limit=1)
+
+    if not paper_title:
+        paper_title = db.select("title", "expanded_conf_papers2", where="paper_id='%s'"%paper_id, limit=1)
+
+    return paper_title[0] if paper_title else ''
+
+
 # retrieve affils based on author name
 # if paper_id is set, we use paper_id to confirm the exact author
 # when there are multiple author-affil pairs
@@ -1044,43 +1053,49 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
         affil_names2 = db.select("affil", "csx_paper_author_affils", where="name='%s'"%author_name)
         affil_names1.extend(affil_names2)
         affil_names = affil_names1
+
     elif table_name == 'dblp':
         affil_names = db.select("affil_name", table_dblp_auth_affil, where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
         # As author_name here may not match author names in the local dblp dataset,
         # We use online DBLP API to fetch the author name which local dblp dataset can recognize
         dblp_keys = set()
         if not affil_names:
-            dblp_keys = get_dblp_key_by_authnames(author_name)
-            if dblp_keys:
-                dblp_key_str = ",".join(["'%s'" % each for each in dblp_keys])
-                try:
-                    affil_names = db.select("affil_name", table_dblp_auth_affil, where="dblp_key IN (%s)"%dblp_key_str)
-                except Exception,e:
-                    print e
-                    import pdb;pdb.set_trace()
-            else:
-                print "no dblp_key:%s " % author_name
+            paper_title = get_paper_title_by_id(paper_id)
+            if paper_title:
+                dblp_key, affil_names = search_affils_by_author_paper(author_name, paper_title)
+                if affil_names:
+                    print 'get %s - %s affils online'%(dblp_key, author_name)
+            # dblp_keys = get_dblp_key_by_authnames(author_name)
+            # if dblp_keys:
+            #     dblp_key_str = ",".join(["'%s'" % each for each in dblp_keys])
+            #     try:
+            #         affil_names = db.select("affil_name", table_dblp_auth_affil, where="dblp_key IN (%s)"%dblp_key_str)
+            #     except Exception,e:
+            #         print e
+            #         import pdb;pdb.set_trace()
+            # else:
+            #     print "no dblp_key:%s " % author_name
 
         if affil_names:
             n_author_recall = 1
             # import pdb;pdb.set_trace()
-        if len(affil_names) > 1 and paper_id:
-            # import pdb;pdb.set_trace()
-            if not dblp_keys:
-                affil_names2 = retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp')
-            else:
-                try:
-                    affil_names2 = retrieve_affils_by_author_papers(dblp_keys, paper_id, table_name='dblp', dblp_key=True)
-                except Exception,e:
-                    print e
-                    import pdb;pdb.set_trace()
+        # if len(affil_names) > 1 and paper_id:
+        #     # import pdb;pdb.set_trace()
+        #     if not dblp_keys:
+        #         affil_names2 = retrieve_affils_by_author_papers(author_id, paper_id, table_name='dblp')
+        #     else:
+        #         try:
+        #             affil_names2 = retrieve_affils_by_author_papers(dblp_keys, paper_id, table_name='dblp', dblp_key=True)
+        #         except Exception,e:
+        #             print e
+        #             import pdb;pdb.set_trace()
 
-            if affil_names2:
-                affil_names = affil_names2
-                print 'succeeded to retrieve affils by paper-author.'
-            else:
-                affil_names = affil_names[:1] # fetch one
-                print 'failed to retrieve affils by paper-author.'
+        #     if affil_names2:
+        #         affil_names = affil_names2
+        #         print 'succeeded to retrieve affils by paper-author.'
+        #     else:
+        #         affil_names = affil_names[:1] # fetch one
+        #         print 'failed to retrieve affils by paper-author.'
 
 
     elif table_name == 'csx':
@@ -1261,9 +1276,9 @@ def get_selected_expand_pubs(conf, year, _type="selected"):
             if not (paper_id, author_id) in retrieved_paper_authors:
                 # print "author id: %s"%author_id
                 # print "paper id: %s"%paper_id
-                # import pdb;pdb.set_trace()
                 # retrieved_affil_ids = None # turn off
                 # import pdb;pdb.set_trace()
+
                 retrieved_affil_ids, flag = retrieve_affils_by_authors(author_id, table_name='dblp', paper_id=paper_id)
                 if flag == 1:
                     get_affil_count += 1
