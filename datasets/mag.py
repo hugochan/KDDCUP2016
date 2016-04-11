@@ -1057,14 +1057,21 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
 
     elif table_name == 'dblp':
         affil_names = db.select("affil_name", table_dblp_auth_affil, where="name='%s' OR other_names REGEXP '[[:<:]]%s[[:>:]]'"%(author_name, author_name))
+        paper_title = get_paper_title_by_id(paper_id)
+
         # As author_name here may not match author names in the local dblp dataset,
         # We use online DBLP API to fetch the author name which local dblp dataset can recognize
-        dblp_keys = set()
+        # dblp_keys = set()
         if not affil_names:
-            paper_title = get_paper_title_by_id(paper_id)
-            if paper_title:
-                dblp_key = get_dblp_key_by_author_paper(author_name, paper_title)
-                affil_names = db.select("affil_name", table_dblp_auth_affil_ext, where="dblp_key='%s'"%dblp_key)
+            dblp_key = db.select("dblp_key", "authorid_dblpkey", where="author_id='%s'"%author_id, limit=1)
+            if not dblp_key:
+                if paper_title:
+                    dblp_key = get_dblp_key_by_author_paper(author_name, paper_title)
+                    db.insert(into="authorid_dblpkey", fields=["author_id", "dblp_key"],\
+                                    values=[(author_id, dblp_key)], ignore=True)
+            else:
+                dblp_key = dblp_key[0]
+            affil_names = db.select("affil_name", table_dblp_auth_affil_ext, where="dblp_key='%s'"%dblp_key)
 
         if not affil_names:
             if paper_title:
@@ -1280,6 +1287,7 @@ def get_selected_expand_pubs(conf, year, _type="selected"):
     count = 0
     get_affil_count = 0
     author = set()
+    affils = set()
     retrieved_paper_authors = set()
     pub_records = defaultdict()
     for paper_id, author_id, affil_id, year in rst:
@@ -1318,6 +1326,7 @@ def get_selected_expand_pubs(conf, year, _type="selected"):
             affil_id = set([affil_id])
 
         author.add(author_id)
+        affils.update(affil_id)
         if pub_records.has_key(paper_id):
             if pub_records[paper_id]['author'].has_key(author_id):
                 pub_records[paper_id]['author'][author_id].update(affil_id)
@@ -1327,7 +1336,7 @@ def get_selected_expand_pubs(conf, year, _type="selected"):
             pub_records[paper_id] = {'author': {author_id: affil_id}, 'year':int(year)}
     print "missing author: %s/%s"%(count, len(author))
     print "get_affil_count: %s"%get_affil_count
-    return pub_records
+    return pub_records, author, affils
 
 
 

@@ -191,6 +191,338 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
 #           graph.remove_node(node)
 
 
+# for IterProjectedLayered approach
+# Two-stage projection: Paper -> Author -> Affil
+def rank_projected_nodes(graph, alpha=0.3, affil_relev=0.3, out_file=None, stats_file=None, **kwargs):
+
+    # If 'graph' is a string then a path was provided, so we load the graph from it
+    if (isinstance(graph, basestring)) :
+        graph = nx.read_gexf(graph, node_type=int)
+
+
+    # Truncate parameters between 0 and 1
+    # age_relev = max(min(age_relev, 1.0), 0.0)
+
+
+    # node_types = {u: layers[graph.node[u]["type"]] for u in graph.nodes()}
+
+#   print graph.number_of_nodes(),
+
+    # Remove isolated nodes
+    # graph.remove_nodes_from(nx.isolates(graph))
+
+    print "alpha: %s" % alpha
+    print "affil_relev: %s" % affil_relev
+    # for u in graph.nodes() :
+
+    #     out_edges = graph.out_edges(u, data=True)
+
+    #     # Here, beside dividing by the total weight for the type of transition, we
+    #     # multiply by the probability of the transition, as given by the rho matrix.
+    #     for u, v, atts in out_edges:
+
+
+    # Maps the layers name to the dimensions
+    layers = {"affil":0}
+
+
+    node_types = {u: layers[graph.node[u]["type"]] for u in graph.nodes()}
+
+    # Quick alias method to check if the node is paper
+    is_affil = lambda n: (node_types[n]==layers["affil"])
+
+
+    affil_scores = {}
+    naffils = 0
+    for u in graph.nodes() :
+        if is_affil(u) and graph.node[u].has_key("affil_score"):
+            affil_scores[u] = float(graph.node[u]["affil_score"])
+            naffils += 1.0
+
+
+    norm = sum(affil_scores.values())
+
+#   print norm
+    if norm == 0.0 :
+        uniform_pers = 1.0/graph.number_of_nodes()
+        pers = {node: uniform_pers for node in graph.nodes()}
+
+    else:
+        uniform_pers = 1.0/naffils
+        pers = {}
+        for node in graph.nodes() :
+            if is_affil(node) :
+                pers[node] = affil_relev*(affil_scores[node]/norm) + (1.0-affil_relev)*uniform_pers
+            else:
+                pers[node] = 0.0
+
+    # Run page rank on the constructed graph
+    scores, _niters = pagerank(graph, alpha=(1.0-alpha), pers=pers, node_types=None, max_iter=10000)
+
+    return scores
+
+
+
+
+# for ProjectedLayer approach
+def rank_single_layer_nodes(graph, alpha=0.3, out_file=None, stats_file=None, **kwargs):
+
+    # If 'graph' is a string then a path was provided, so we load the graph from it
+    if (isinstance(graph, basestring)) :
+        graph = nx.read_gexf(graph, node_type=int)
+
+
+    # Truncate parameters between 0 and 1
+    # age_relev = max(min(age_relev, 1.0), 0.0)
+
+
+    # node_types = {u: layers[graph.node[u]["type"]] for u in graph.nodes()}
+
+#   print graph.number_of_nodes(),
+
+    # Remove isolated nodes
+    # import pdb;pdb.set_trace()
+    # graph.remove_nodes_from(nx.isolates(graph))
+
+    print "alpha: %s" % alpha
+    # for u in graph.nodes() :
+
+    #     out_edges = graph.out_edges(u, data=True)
+
+    #     # Here, beside dividing by the total weight for the type of transition, we
+    #     # multiply by the probability of the transition, as given by the rho matrix.
+    #     for u, v, atts in out_edges:
+
+    uniform_pers = 1.0/graph.number_of_nodes()
+    pers = {node: uniform_pers for node in graph.nodes()}
+
+
+    # Run page rank on the constructed graph
+    scores, _niters = pagerank(graph, alpha=(1.0-alpha), pers=pers, node_types=None, max_iter=10000)
+
+#   if stats_file :
+#       with open(stats_file, "a") as f :
+#           print >> f, "%d\t%f" % (niters, e-s)
+
+    # Write a slight modified graph to file (normalized edges and rank
+    # value included as attribute)
+#   if out_file :
+#       for id, relevance in pg.items() :
+#           graph.add_node(id, relevance=float(relevance))
+#
+#       nx.write_gexf(graph, out_file, encoding="utf-8")
+
+    # If needed, dump all the PG values to be used as init values
+    # in future computation to speedup convergence.
+#   if True :
+#       key_names = {0:"paper_id", 1:"author_id", 2:"topic_id", 3:"word_id"}
+#       nstart_values = {}
+#       for n, score in rank :
+#           nstart_values[(node_types[n], graph.node[n][key_names[node_types[n]]])] = score
+#
+#       with open(DATA + "cache/nstart.pg", "w") as nstart_file :
+#           cPickle.dump(nstart_values, nstart_file)
+
+    return scores
+
+
+
+def rank_author_affil_nodes(graph, author_affils_relev=0.2, alpha=0.3, affil_relev=0.3, **kwargs):
+
+    # If 'graph' is a string then a path was provided, so we load the graph from it
+    if (isinstance(graph, basestring)) :
+        graph = nx.read_gexf(graph, node_type=int)
+
+    rho = np.array([
+                [1.0-author_affils_relev,             author_affils_relev],
+                [         author_affils_relev,       1-author_affils_relev]])
+
+    print rho
+    print alpha
+    print "affil_relev: %s" % affil_relev
+    layers = {"author":0, "affil":1}
+
+    # Alias vector to map nodes into their types (paper, author, etc.) already
+    # as their numeric representation (paper=0, author=1, etc.) as listed above.
+
+    node_types = {u: layers[graph.node[u]["type"]] for u in graph.nodes()}
+    # Quick alias method to check if the node is paper or affil
+    is_affil = lambda n: (node_types[n] == layers["affil"])
+    is_author = lambda n: (node_types[n] == layers["author"])
+
+#   print graph.number_of_nodes(),
+
+    # Remove isolated nodes
+    # graph.remove_nodes_from(nx.isolates(graph))
+
+#   print graph.number_of_nodes()
+
+
+    # Normalize weights within each kind of layer transition, e.g., normalize papers to
+    # topic edges separately from papers to papers edges.
+    for u in graph.nodes() :
+
+        weights = defaultdict(float)
+        out_edges = graph.out_edges(u, data=True)
+        for u, v, atts in out_edges:
+
+            weights[node_types[v]] = max(atts['weight'], weights[node_types[v]])
+
+        # Here, beside dividing by the total weight for the type of transition, we
+        # multiply by the probability of the transition, as given by the rho matrix.
+        for u, v, atts in out_edges:
+            from_layer = node_types[u]
+            to_layer   = node_types[v]
+
+            atts['weight'] *= rho[from_layer][to_layer]/weights[to_layer]
+
+
+    affil_scores = {}
+    naffils = 0
+
+    author_scores = {}
+    nauthors = 0
+    for u in graph.nodes() :
+        if is_affil(u) and graph.node[u].has_key("affil_score"):
+            affil_scores[u] = float(graph.node[u]["affil_score"])
+            naffils += 1.0
+        elif is_author(u) and graph.node[u].has_key("author_score"):
+            author_scores[u] = float(graph.node[u]["author_score"])
+            nauthors += 1.0
+
+
+    norm = sum(affil_scores.values())
+    norm2 = sum(author_scores.values())
+
+#   print norm
+    if norm == 0.0 :
+        uniform_pers = 1.0/graph.number_of_nodes()
+        pers = {node: uniform_pers for node in graph.nodes()}
+
+    else:
+        uniform_pers = 1.0/naffils
+        uniform_pers2 = 1.0/nauthors
+        # uniform_pers2 = 1.0/(graph.number_of_nodes() - naffils)
+        pers = {}
+        for node in graph.nodes():
+            if is_affil(node):
+                pers[node] = affil_relev*(affil_scores[node]/norm) + (1.0-affil_relev)*uniform_pers
+
+            elif is_author(node):
+                pers[node] = affil_relev*(author_scores[node]/norm2) + (1.0-affil_relev)*uniform_pers2
+
+            else:
+                pers[node] = 0.0
+
+
+    # Run page rank on the constructed graph
+    scores, _niters = pagerank(graph, alpha=(1.0-alpha), pers=pers, node_types=node_types, max_iter=10000)
+
+
+    return scores
+
+
+
+def rank_paper_author_affil_nodes(graph, papers_relev=0.2,
+                                         authors_relev=0.2,
+                                         author_affils_relev=0.2,
+                                         alpha=0.3, affil_relev=0.3, **kwargs):
+
+    # If 'graph' is a string then a path was provided, so we load the graph from it
+    if (isinstance(graph, basestring)) :
+        graph = nx.read_gexf(graph, node_type=int)
+
+
+
+    rho = np.asarray([papers_relev, authors_relev, author_affils_relev])
+    # rho = np.asarray([papers_relev, authors_relev, words_relev, author_affils_relev])
+    # rho = np.asarray([papers_relev, authors_relev, words_relev, venues_relev, author_affils_relev])
+
+    # Each row and col sumps up to 1
+    rho_papers = rho[0] / (rho[0] + rho[1])
+    rho_authors = rho[1] / (rho[0] + rho[1])
+    rho_affils = rho[2]
+
+    rho = np.array([[rho_papers,     rho_authors,              0],
+                [rho_authors,  1.0-rho_authors-rho_affils,             rho_affils],
+                [         0,       rho_affils,                 1.0-rho_affils]])
+
+    print rho
+    print alpha
+    print "affil_relev: %s" % affil_relev
+    layers = {"paper":0, "author":1, "affil":2}
+
+    # Alias vector to map nodes into their types (paper, author, etc.) already
+    # as their numeric representation (paper=0, author=1, etc.) as listed above.
+
+    node_types = {u: layers[graph.node[u]["type"]] for u in graph.nodes()}
+    # Quick alias method to check if the node is paper or affil
+    is_affil = lambda n: (node_types[n] == layers["affil"])
+    is_author = lambda n: (node_types[n] == layers["author"])
+    is_paper = lambda n: (node_types[n] == layers["paper"])
+
+#   print graph.number_of_nodes(),
+
+    # Remove isolated nodes
+    # graph.remove_nodes_from(nx.isolates(graph))
+
+#   print graph.number_of_nodes()
+
+
+    # Normalize weights within each kind of layer transition, e.g., normalize papers to
+    # topic edges separately from papers to papers edges.
+    for u in graph.nodes() :
+
+        weights = defaultdict(float)
+        out_edges = graph.out_edges(u, data=True)
+        for u, v, atts in out_edges:
+
+            weights[node_types[v]] = max(atts['weight'], weights[node_types[v]])
+
+        # Here, beside dividing by the total weight for the type of transition, we
+        # multiply by the probability of the transition, as given by the rho matrix.
+        for u, v, atts in out_edges:
+            from_layer = node_types[u]
+            to_layer   = node_types[v]
+
+            atts['weight'] *= rho[from_layer][to_layer]/weights[to_layer]
+
+
+    affil_scores = {}
+    naffils = 0
+    for u in graph.nodes() :
+        if is_affil(u) and graph.node[u].has_key("affil_score"):
+            affil_scores[u] = float(graph.node[u]["affil_score"])
+            naffils += 1.0
+
+
+    norm = sum(affil_scores.values())
+
+#   print norm
+    if norm == 0.0 :
+        uniform_pers = 1.0/graph.number_of_nodes()
+        pers = {node: uniform_pers for node in graph.nodes()}
+
+    else:
+        uniform_pers = 1.0/naffils
+        # uniform_pers2 = 1.0/(graph.number_of_nodes() - naffils)
+        pers = {}
+        for node in graph.nodes() :
+            if is_affil(node) :
+                pers[node] = affil_relev*(affil_scores[node]/norm) + (1.0-affil_relev)*uniform_pers
+            else:
+                pers[node] = 0.0
+
+
+    # Run page rank on the constructed graph
+    scores, _niters = pagerank(graph, alpha=(1.0-alpha), pers=pers, node_types=node_types, max_iter=10000)
+
+
+    return scores
+
+
+
+# for MultiLayered approach
 def rank_nodes(graph, papers_relev=0.2,
                                          authors_relev=0.2,
                                          # topics_relev=0.2,

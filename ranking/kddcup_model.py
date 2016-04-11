@@ -18,8 +18,8 @@ import logging as log
 import words
 import config
 import utils
-from datasets.mag import get_selected_docs, get_conf_docs, retrieve_affils_by_authors
-
+from datasets.mag import get_selected_docs, get_selected_expand_pubs, get_conf_docs, retrieve_affils_by_authors
+from ranking.kddcup_ranker import rank_single_layer_nodes
 
 
 # Database connection
@@ -241,7 +241,7 @@ class ModelBuilder:
     return [(u, v, 1.0) for (u, v) in edges]
 
 
-  def get_pubs_layer(self, conf_name, year, n_hops, exclude_list=[], expand_method='n_hops'):
+  def get_pubs_layer(self, conf_name, year, n_hops, exclude_list=[], expand_method='conf'):
     """
     First documents are retrieved from pub records of a targeted conference.
     Then we follow n_hops from these nodes to have the first layer of the graph (papers).
@@ -268,8 +268,8 @@ class ModelBuilder:
       # Expand the docs by getting more papers from the targeted conference
       # expanded_pubs = self.get_expanded_pubs_by_conf(conf_name, [2009, 2010])
       nodes = set(docs)
-      # expanded_year = []
-      expanded_year = range(2005, 2011)
+      expanded_year = []
+      # expanded_year = range(2005, 2011)
       expanded_pubs = self.get_expanded_pubs_by_conf2(conf_name, expanded_year)
 
       # add year
@@ -277,8 +277,9 @@ class ModelBuilder:
         self.pub_years[paper] = year
 
       # Remove documents from the exclude list and keep only processed ids
-      expanded_docs = set(zip(*expanded_pubs)[0]) - set(exclude_list)
-      nodes.update(expanded_docs)
+      if expanded_pubs:
+        expanded_docs = set(zip(*expanded_pubs)[0]) - set(exclude_list)
+        nodes.update(expanded_docs)
 
       self.edges_lookup = GraphBuilder(get_all_edges(nodes))
 
@@ -829,11 +830,11 @@ class ModelBuilder:
 
 
   def assemble_layers(self, pubs, citation_edges,
-            authors, coauth_edges, auth_edges,
+            authors, auth_auth_edges, coauth_edges, auth_edges,
             # topics, topic_topic_edges, paper_topic_edges,
             # ngrams, ngram_ngram_edges, paper_ngram_edges,
             # venues, pub_venue_edges,
-            affils, author_affil_edges, affil_affil_edges):
+            affils, author_affil_edges, affil_affil_edges, affil_scores=None, author_scores=None):
     """
     Assembles the layers as an unified graph. Each node as an unique id, its type (paper,
     author, etc.) and a readable label (paper title, author name, etc.)
@@ -845,8 +846,8 @@ class ModelBuilder:
     pubs_ids = {}
     authors_ids = {}
     # topics_ids = {}
-    words_ids = {}
-    venues_ids = {}
+    # words_ids = {}
+    # venues_ids = {}
     affils_ids = {}
 
     # Controls the unique incremental id generation
@@ -854,46 +855,65 @@ class ModelBuilder:
 
     # Add each paper providing an unique node id. Some attributes must be added
     # even if include_attributes is True, since they are used in ranking algorithm.
-    for pub in pubs:
-      pub = str(pub)
+    if pubs:
+      for pub in pubs:
+        pub = str(pub)
 
-      #         if hasattr(self, 'query_sims') :
-      #             query_score = float(self.query_sims[paper])  #if paper in self.query_sims else 0.0
-      #         else :
-      #             query_score = 0.0
+        #         if hasattr(self, 'query_sims') :
+        #             query_score = float(self.query_sims[paper])  #if paper in self.query_sims else 0.0
+        #         else :
+        #             query_score = 0.0
 
-      graph.add_node(next_id,
-               type="paper",
-               entity_id=pub,
-               year=self.pub_years[pub] if self.pub_years.has_key(pub) else 0
-               )
+        graph.add_node(next_id,
+                 type="paper",
+                 entity_id=pub,
+                 year=self.pub_years[pub] if self.pub_years.has_key(pub) else 0
+                 )
 
-      pubs_ids[pub] = next_id
-      next_id += 1
+        pubs_ids[pub] = next_id
+        next_id += 1
 
-    # Add citation edges (directed)
-    for paper1, paper2, weight in citation_edges:
-      graph.add_edge(pubs_ids[paper1], pubs_ids[paper2], weight=weight)
-      # graph.add_edge(pubs_ids[paper2], pubs_ids[paper1], weight=weight) # try undirected
+      # Add citation edges (directed)
+      for paper1, paper2, weight in citation_edges:
+        graph.add_edge(pubs_ids[paper1], pubs_ids[paper2], weight=weight)
+        # graph.add_edge(pubs_ids[paper2], pubs_ids[paper1], weight=weight) # try undirected, bad
 
 
     # Add each author providing an unique node id
-    for author in authors:
-      graph.add_node(next_id, type="author", entity_id=author)
+    if authors:
+      if not author_scores:
+        for author in authors:
+          graph.add_node(next_id, type="author", entity_id=author)
 
-      authors_ids[author] = next_id
-      next_id += 1
+          authors_ids[author] = next_id
+          next_id += 1
+
+      else:
+        for author in authors:
+          graph.add_node(next_id, type="author", entity_id=author, author_score=author_scores[author])
+
+          authors_ids[author] = next_id
+          next_id += 1
 
 
-    # Add co-authorship edges on both directions (undirected)
-    for author1, author2, weight in coauth_edges:
-      graph.add_edge(authors_ids[author1], authors_ids[author2], weight=weight)
-      graph.add_edge(authors_ids[author2], authors_ids[author1], weight=weight)
 
-    # Add authorship edges on both directions (undirected)
-    for paper, author in auth_edges:
-      graph.add_edge(pubs_ids[paper], authors_ids[author], weight=1.0)
-      graph.add_edge(authors_ids[author], pubs_ids[paper], weight=1.0)
+      # Add author-author (citation) edges on both directions (undirected)
+      if auth_auth_edges:
+        for author1, author2, weight in auth_auth_edges:
+          graph.add_edge(authors_ids[author1], authors_ids[author2], weight=weight)
+
+
+      # Add coauthor edges on both directions (undirected)
+      if coauth_edges:
+        for author1, author2, weight in coauth_edges:
+          graph.add_edge(authors_ids[author1], authors_ids[author2], weight=weight)
+          graph.add_edge(authors_ids[author2], authors_ids[author1], weight=weight)
+
+      # Add authorship edges on both directions (undirected)
+      if auth_edges:
+        for paper, author in auth_edges:
+          graph.add_edge(pubs_ids[paper], authors_ids[author], weight=1.0)
+          graph.add_edge(authors_ids[author], pubs_ids[paper], weight=1.0)
 
 
     ####################################
@@ -946,37 +966,49 @@ class ModelBuilder:
     #   graph.add_edge(venues_ids[venue], pubs_ids[pub], weight=weight)
 
 
-  # Add affils to the graph
-    for affil in affils:
-      graph.add_node(next_id, type="affil", entity_id=affil)
+    # Add affils to the graph
+    if affils:
+      if not affil_scores:
+        for affil in affils:
+          graph.add_node(next_id, type="affil", entity_id=affil)
 
-      affils_ids[affil] = next_id
-      next_id += 1
+          affils_ids[affil] = next_id
+          next_id += 1
 
-    # author_affils_dict = defaultdict()
-    for author, affil, weight in author_affil_edges:
-      graph.add_edge(authors_ids[author], affils_ids[affil], weight=weight)
-      graph.add_edge(affils_ids[affil], authors_ids[author], weight=weight)
-      # try:
-      #   author_affils_dict[author].add(affil)
-      # except:
-      #   author_affils_dict[author] = set([affil])
+      else:
+        for affil in affils:
+          graph.add_node(next_id, type="affil", entity_id=affil, affil_score=affil_scores[affil])
 
-    # try affil-affil layer
-    # 1)
-    # for affil_1, affil_2, weight in affil_affil_edges:
-    #   graph.add_edge(affils_ids[affil_1], affils_ids[affil_2], weight=weight)
-    #   graph.add_edge(affils_ids[affil_2], affils_ids[affil_1], weight=weight)
+          affils_ids[affil] = next_id
+          next_id += 1
 
-    # 2)
 
-    # for author1, author2, weight in coauth_edges:
-    #   if author_affils_dict.has_key(author1) and author_affils_dict.has_key(author2):
-    #     for affil1 in author_affils_dict[author1]:
-    #       for affil2 in author_affils_dict[author2]:
-    #         if affil1 != affil2:
-    #           graph.add_edge(affils_ids[affil1], affils_ids[affil2], weight=weight)
-    #           graph.add_edge(affils_ids[affil2], affils_ids[affil1], weight=weight)
+
+      if author_affil_edges:
+        # author_affils_dict = defaultdict()
+        for author, affil, weight in author_affil_edges:
+          graph.add_edge(authors_ids[author], affils_ids[affil], weight=weight)
+          graph.add_edge(affils_ids[affil], authors_ids[author], weight=weight)
+          # try:
+          #   author_affils_dict[author].add(affil)
+          # except:
+          #   author_affils_dict[author] = set([affil])
+
+
+      # try affil-affil layer
+      if affil_affil_edges:
+        # 1)
+        for affil1, affil2, weight in affil_affil_edges:
+          graph.add_edge(affils_ids[affil1], affils_ids[affil2], weight=weight)
+
+        # 2)
+        # for author1, author2, weight in coauth_edges:
+        #   if author_affils_dict.has_key(author1) and author_affils_dict.has_key(author2):
+        #     for affil1 in author_affils_dict[author1]:
+        #       for affil2 in author_affils_dict[author2]:
+        #         if affil1 != affil2:
+        #           graph.add_edge(affils_ids[affil1], affils_ids[affil2], weight=weight)
+        #           graph.add_edge(affils_ids[affil2], affils_ids[affil1], weight=weight)
 
     # Get the attributes for each author
     # Get attributes for each paper
@@ -1041,6 +1073,7 @@ class ModelBuilder:
     return list(venues), pub_venue_edges
 
 
+
   def get_affils_layer(self, authors, related_papers):
     """
     Returns the affils' ids and edges from authors to affiliations according
@@ -1081,7 +1114,7 @@ class ModelBuilder:
             if not (paper_id, author_id) in retrieved_paper_authors:
                 # print "author id: %s"%author_id
                 # print "paper id: %s"%paper_id
-                import pdb;pdb.set_trace()
+                # import pdb;pdb.set_trace()
                 # retrieved_affil_ids = None # turn off
                 retrieved_affil_ids, flag = retrieve_affils_by_authors(author_id, table_name='dblp', paper_id=paper_id)
                 if flag == 1:
@@ -1195,6 +1228,188 @@ class ModelBuilder:
     return list(affils), list(author_affil_edges), list(affil_affil_edges)
 
 
+  def get_paper_affils(self, conf_name, year, age_relev, exclude):
+
+    current_year = config.PARAMS['current_year']
+    old_year = config.PARAMS['old_year']
+
+    pubs, _, affils = get_selected_expand_pubs(conf_name, year)
+    docs = set(pubs.keys()) - set(exclude)
+
+    self.edges_lookup = GraphBuilder(get_all_edges(docs))
+    edges = self.edges_lookup.subgraph(docs)
+    weighted_edges = self.get_weights_file(edges)
+
+    paper_affils = defaultdict()
+    for each in docs:
+      affil1 = set([y for x in pubs[each]['author'].values() for y in x])
+      paper_affils[each] = affil1
+
+    return docs, weighted_edges, paper_affils
+
+
+  def get_projected_affils_layer(self, conf_name, year, age_relev, exclude):
+    """
+    directly projects paper and author layers onto affil layer.
+    """
+
+    current_year = config.PARAMS['current_year']
+    old_year = config.PARAMS['old_year']
+
+    pubs, _, affils = get_selected_expand_pubs(conf_name, year)
+    docs = set(pubs.keys()) - set(exclude)
+
+    self.edges_lookup = GraphBuilder(get_all_edges(docs))
+    edges = self.edges_lookup.subgraph(docs)
+
+    affil_affils = defaultdict()
+    for k, v in edges:
+      # paper k cites paper v
+      year = min(max(pubs[k]['year'], old_year), current_year)
+      age_decay = np.exp(-(age_relev)*(current_year-year)) # ranges from [0, 1]
+
+      affils1 = set([y for x in pubs[k]['author'].values() for y in x])
+      affils2 = set([y for x in pubs[v]['author'].values() for y in x])
+
+      for affil1 in affils1:
+        for affil2 in affils2:
+          if affil1 != affil2:
+            if affil_affils.has_key(affil1):
+              if affil_affils[affil1].has_key(affil2):
+                affil_affils[affil1][affil2] += age_decay
+              else:
+                affil_affils[affil1][affil2] = age_decay
+            else:
+              affil_affils[affil1] = {affil2: age_decay}
+    # import pdb;pdb.set_trace()
+
+    affil_affil_edges = set()
+    for k, v in affil_affils.iteritems():
+      for each, count in v.iteritems():
+        weight = np.log10(1.0 + count)
+        affil_affil_edges.add((k, each, weight))
+
+
+
+
+    # if expand_method == 'n_hops':
+
+    #   # Get doc ids as uni-dimensional list
+    #   self.edges_lookup = GraphBuilder(get_all_edges(docs))
+    #   nodes = set(docs)
+
+    #   # Expand the docs set by reference
+    #   nodes = self.get_expanded_pubs_by_nhops(nodes, self.edges_lookup, exclude_list, n_hops)
+
+
+    # elif expand_method == 'conf':
+
+    #   # Expand the docs by getting more papers from the targeted conference
+    #   # expanded_pubs = self.get_expanded_pubs_by_conf(conf_name, [2009, 2010])
+    #   nodes = set(docs)
+    #   expanded_year = []
+    #   # expanded_year = range(2005, 2011)
+    #   expanded_pubs = self.get_expanded_pubs_by_conf2(conf_name, expanded_year)
+
+    #   # add year
+    #   for paper, year in expanded_pubs:
+    #     self.pub_years[paper] = year
+
+    #   # Remove documents from the exclude list and keep only processed ids
+    #   if expanded_pubs:
+    #     expanded_docs = set(zip(*expanded_pubs)[0]) - set(exclude_list)
+    #     nodes.update(expanded_docs)
+
+    #   self.edges_lookup = GraphBuilder(get_all_edges(nodes))
+
+    # else:
+    #   raise ValueError("parameter expand_method should either be n_hops or conf.")
+    return affils, affil_affil_edges
+
+
+  def get_projected_author_layer(self, conf_name, year, age_relev, exclude):
+    """
+    projects paper layer onto author layer.
+    """
+
+    current_year = config.PARAMS['current_year']
+    old_year = config.PARAMS['old_year']
+
+    pubs, authors, _ = get_selected_expand_pubs(conf_name, year)
+    docs = set(pubs.keys()) - set(exclude)
+
+    self.edges_lookup = GraphBuilder(get_all_edges(docs))
+    edges = self.edges_lookup.subgraph(docs)
+
+    # import pdb;pdb.set_trace()
+
+
+    # coauthor edges
+    author_affils = defaultdict()
+    co_authors = defaultdict()
+    for each_doc in docs:
+      # add author-affils
+      for k, v in pubs[each_doc]['author'].iteritems():
+        try:
+          author_affils[k].update(v)
+        except:
+          author_affils[k] = v
+
+
+      year = min(max(pubs[each_doc]['year'], old_year), current_year)
+      age_decay = np.exp(-(age_relev)*(current_year-year)) # ranges from [0, 1]
+
+      auths = list(set(pubs[each_doc]['author'].keys()))
+      for i in xrange(len(auths) - 1):
+        for j in xrange(i + 1, len(auths)):
+          auth1 = min(auths[i], auths[j])
+          auth2 = max(auths[i], auths[j])
+          if co_authors.has_key(auth1):
+            if co_authors[auth1].has_key(auth2):
+              co_authors[auth1][auth2] += age_decay
+            else:
+              co_authors[auth1][auth2] = age_decay
+          else:
+            co_authors[auth1] = {auth2: age_decay}
+
+    coauthor_edges = set()
+    for k, v in co_authors.iteritems():
+      for each, count in v.iteritems():
+        weight = np.log10(1.0 + count)
+        coauthor_edges.add((k, each, weight))
+
+
+    # author-author edges
+    author_authors = defaultdict()
+    for k, v in edges:
+      # paper k cites paper v
+      year = min(max(pubs[k]['year'], old_year), current_year)
+      age_decay = np.exp(-(age_relev)*(current_year-year)) # ranges from [0, 1]
+
+      authors1 = set([x for x in pubs[k]['author'].keys()])
+      authors2 = set([x for x in pubs[v]['author'].keys()])
+
+      for author1 in authors1:
+        for author2 in authors2:
+          if author1 != author2:
+            if author_authors.has_key(author1):
+              if author_authors[author1].has_key(author2):
+                author_authors[author1][author2] += age_decay
+              else:
+                author_authors[author1][author2] = age_decay
+            else:
+              author_authors[author1] = {author2: age_decay}
+
+    author_author_edges = set()
+    for k, v in author_authors.iteritems():
+      for each, count in v.iteritems():
+        weight = np.log10(1.0 + count)
+        author_author_edges.add((k, each, weight))
+
+    return authors, author_author_edges, coauthor_edges, author_affils
+
+
+
   def build(self, conf_name, year, n_hops, min_topic_lift, min_ngram_lift, exclude=[]):
     """
     Build graph model from given conference.
@@ -1225,16 +1440,16 @@ class ModelBuilder:
     # venues, pub_venue_edges = self.get_venues_layer(pubs)
     # log.debug("%d venues and %d pub-venue edges." % (len(venues), len(pub_venue_edges)))
 
-    affils, author_affil_edges, get_affils_layer = self.get_affils_layer(authors, pubs)
+    affils, author_affil_edges, affil_affil_edges = self.get_affils_layer(authors, pubs)
     log.debug("%d affiliations and %d pub-affil edges." % (len(affils), len(author_affil_edges)))
 
     graph = self.assemble_layers(pubs, citation_edges,
-                   authors, coauth_edges, auth_edges,
+                   authors, None, coauth_edges, auth_edges,
                    # None, None, None,
                    #                                                        topics, topic_topic_edges, pub_topic_edges,
                    # words, word_word_edges, pub_word_edges,
                    # venues, pub_venue_edges,
-                   affils, author_affil_edges, get_affils_layer)
+                   affils, author_affil_edges, None)
 
     # Writes the contexts of each edge into a file to be used efficiently
     # on the ranking algorithm.
@@ -1242,6 +1457,253 @@ class ModelBuilder:
 
     # Writes the gexf
     #       write_graph(graph, model_file)
+    return graph
+
+
+  def build_affils(self, conf_name, year, age_relev, n_hops, exclude=[]):
+    """
+    Build graph model from given conference.
+    """
+
+    # log.debug("Building model for conference='%s' and hops=%d." % (conf_name, n_hops))
+
+    # pubs, citation_edges = self.get_pubs_layer(conf_name, year, n_hops, set(exclude))
+    # log.debug("%d pubs and %d citation edges." % (len(pubs), len(citation_edges)))
+    # print "%d pubs and %d citation edges." % (len(pubs), len(citation_edges))
+    # authors, coauth_edges, auth_edges = self.get_authors_layer(pubs)
+    # log.debug("%d authors, %d co-authorship edges and %d authorship edges." % (
+    #   len(authors), len(coauth_edges), len(auth_edges)))
+
+    affils, affil_affil_edges = self.get_projected_affils_layer(conf_name, year, age_relev, exclude)
+
+    graph = self.assemble_layers(None, None,
+                   None, None, None, None,
+                   affils, None, affil_affil_edges)
+
+    # Writes the contexts of each edge into a file to be used efficiently
+    # on the ranking algorithm.
+    #       self.write_edge_contexts(papers, citation_edges, ctxs_file)
+
+    # Writes the gexf
+    #       write_graph(graph, model_file)
+    return graph
+
+
+  def get_ranked_affils_by_papers(self, conf_name, year, age_relev, n_hops, alpha, exclude=[]):
+
+    docs, citation_edges, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude)
+    # 1) run pagerank on paper layer
+    graph = self.assemble_layers(docs, citation_edges,
+                   None, None, None, None,
+                   None, None, None)
+
+    paper_scores = rank_single_layer_nodes(graph, alpha=alpha)
+    paper_scores = {graph.node[nid]['entity_id']: float(score) for nid, score in paper_scores.items()}
+
+    # 2) compute affil scores
+    affil_scores = defaultdict()
+    for each_doc in docs:
+      if not paper_affils.has_key(each_doc):
+        continue
+      # normalized score
+      # count = float(len(author_affils[each_author]))
+
+      score = paper_scores[each_doc]
+      # directed affiliateship
+      for each_affil in paper_affils[each_doc]:
+        try:
+          affil_scores[each_affil] += score
+        except:
+          affil_scores[each_affil] = score
+
+    return affil_scores
+
+
+
+  def get_ranked_affils_by_authors(self, conf_name, year, age_relev, n_hops, alpha, exclude=[]):
+    # 1) page layer -> author layer
+    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude)
+
+    # 1) run pagerank on author layer
+    graph = self.assemble_layers(None, None,
+                   authors, author_author_edges, None, None,
+                   None, None, None)
+
+    author_scores = rank_single_layer_nodes(graph, alpha=alpha)
+    author_scores = {graph.node[nid]['entity_id']: float(score) for nid, score in author_scores.items()}
+
+
+    # graph2 = self.assemble_layers(None, None,
+    #                authors, None, coauthor_edges, None,
+    #                None, None, None)
+
+    # auth_mapping = {graph2.node[x]['entity_id']:x for x in graph2.nodes()}
+    # W = nx.stochastic_graph(graph2, weight='weight') # create a copy in (right) stochastic form
+
+    # import pdb;pdb.set_trace()
+    # 2) compute affil scores
+    affil_scores = defaultdict()
+    for each_author in authors:
+      if not author_affils.has_key(each_author):
+        continue
+      # normalized score
+      # count = float(len(author_affils[each_author]))
+
+      score = author_scores[each_author]
+      # directed affiliateship
+      for each_affil in author_affils[each_author]:
+        try:
+          affil_scores[each_affil] += score
+        except:
+          affil_scores[each_affil] = score
+
+
+      # # one-hop affiliateship (having coathor belong to that affil)
+      # for k, v in W[auth_mapping[each_author]].iteritems(): # neighbors of each_author
+      #   nbor = graph2.node[k]['entity_id']
+      #   if author_affils.has_key(nbor):
+      #     for each_affil2 in author_affils[nbor]:
+      #       if not each_affil2 in author_affils[each_author]:
+      #         try:
+      #           affil_scores[each_affil2] += score * v['weight']
+      #         except:
+      #           affil_scores[each_affil2] = score * v['weight']
+
+    return affil_scores
+
+
+  def build_projected_layers(self, conf_name, year, age_relev, n_hops, alpha, exclude=[]):
+    # 1) page layer -> author layer
+    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude)
+
+    # run pagerank on author layer
+    graph = self.assemble_layers(None, None,
+                   authors, author_author_edges, None, None,
+                   None, None, None)
+
+    author_scores = rank_single_layer_nodes(graph, alpha=alpha)
+    author_scores = {graph.node[nid]['entity_id']: float(score) for nid, score in author_scores.items()}
+
+
+    # 2) author layer -> affil layer
+    affil_affils = defaultdict()
+    for author1, author2, _ in author_author_edges:
+      if author_affils.has_key(author1) and author_affils.has_key(author2):
+        affils1 = author_affils[author1]
+        affils2 = author_affils[author2]
+
+        score = author_scores[author1]
+        for affil1 in affils1:
+          for affil2 in affils2:
+            if affil1 != affil2:
+              if affil_affils.has_key(affil1):
+                if affil_affils[affil1].has_key(affil2):
+                  affil_affils[affil1][affil2] += score
+                else:
+                  affil_affils[affil1][affil2] = score
+              else:
+                affil_affils[affil1] = {affil2: score}
+
+    affil_affil_edges = set()
+    for k, v in affil_affils.iteritems():
+      for each, weight in v.iteritems():
+        # weight = np.log10(1.0 + weight)
+        affil_affil_edges.add((k, each, weight))
+
+
+    affils = [y for x in author_affils.values() for y in x]
+    # graph = self.assemble_layers(None, None,
+    #                None, None, None, None,
+    #                affils, None, affil_affil_edges)
+
+
+    author_affil_edges = [(k, y, 1.0) for k, v in author_affils.iteritems() for y in v]
+    graph = self.assemble_layers(None, None,
+                   authors, author_author_edges, None, None,
+                   affils, author_affil_edges, affil_affil_edges)
+    return graph
+
+
+  def build_projected_layers2(self, conf_name, year, age_relev, n_hops, alpha, exclude=[]):
+
+
+
+    # 1) page layer -> author layer
+    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude)
+
+    # run pagerank on author layer
+    graph = self.assemble_layers(None, None,
+                   authors, author_author_edges, None, None,
+                   None, None, None)
+
+
+    author_scores = rank_single_layer_nodes(graph, alpha=alpha)
+    author_scores = {graph.node[nid]['entity_id']: float(score) for nid, score in author_scores.items()}
+
+
+    # 1) computes affil scores
+    affil_scores = defaultdict()
+    for each_author in authors:
+      if not author_affils.has_key(each_author):
+        continue
+      # normalized score
+      # count = float(len(author_affils[each_author]))
+
+      score = author_scores[each_author]
+      # directed affiliateship
+      for each_affil in author_affils[each_author]:
+        try:
+          affil_scores[each_affil] += score
+        except:
+          affil_scores[each_affil] = score
+
+
+
+    # 2) author layer -> affil layer
+    affil_affils = defaultdict()
+    for author1, author2, _ in author_author_edges:
+      if author_affils.has_key(author1) and author_affils.has_key(author2):
+        affils1 = author_affils[author1]
+        affils2 = author_affils[author2]
+
+        score = author_scores[author1]
+        for affil1 in affils1:
+          for affil2 in affils2:
+            if affil1 != affil2:
+              if affil_affils.has_key(affil1):
+                if affil_affils[affil1].has_key(affil2):
+                  affil_affils[affil1][affil2] += score
+                else:
+                  affil_affils[affil1][affil2] = score
+              else:
+                affil_affils[affil1] = {affil2: score}
+
+    affil_affil_edges = set()
+    for k, v in affil_affils.iteritems():
+      for each, weight in v.iteritems():
+        # weight = np.log10(1.0 + weight)
+        affil_affil_edges.add((k, each, weight))
+
+
+    affils = [y for x in author_affils.values() for y in x]
+    # graph = self.assemble_layers(None, None,
+    #                None, None, None, None,
+    #                affils, None, affil_affil_edges, affil_scores)
+
+
+    author_affil_edges = [(k, y, 1.0) for k, v in author_affils.iteritems() for y in v]
+    graph = self.assemble_layers(None, None,
+                   authors, author_author_edges, None, None,
+                   affils, author_affil_edges, affil_affil_edges, affil_scores, author_scores)
+
+
+
+    # docs, citation_edges, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude)
+
+    # graph = self.assemble_layers(docs, citation_edges,
+    #                authors, author_author_edges, None, None,
+    #                affils, author_affil_edges, affil_affil_edges, affil_scores)
+
     return graph
 
 

@@ -14,7 +14,7 @@ import cPickle
 # from baselines.scholar import match_by_title
 from evaluation.metrics import ndcg2
 from datasets.mag import get_selected_docs
-from ranking.kddcup_searchers import simple_search, SimpleSearcher, Searcher
+from ranking.kddcup_searchers import simple_search, SimpleSearcher, RegressionSearcher, Searcher, ProjectedSearcher, IterProjectedSearcher
 
 
 # log.basicConfig(format='%(asctime)s [%(levelname)s] : %(message)s', level=log.INFO)
@@ -78,9 +78,20 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     start = time.time()
 
     if searcher.name() == "SimpleSearcher":
-        # expand_year = []
-        expand_year = range(2005, 2011)
+        expand_year = []
+        # expand_year = range(2005, 2011)
         results = searcher.search(selected_affils, conf_name, year, expand_year=expand_year, age_decay=True, rtype="affil")
+
+    elif searcher.name() == "RegressionSearcher":
+        expand_year = []
+        # expand_year = range(2005, 2011)
+        results = searcher.search(selected_affils, conf_name, year, expand_year=expand_year)
+
+    elif searcher.name() == "IterProjectedLayered":
+        expand_year = []
+        # results = searcher.easy_search(selected_affils, conf_name, year, exclude_papers)
+        results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
+
     else:
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
 
@@ -121,11 +132,11 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
 def main():
 
     confs = [
-                "SIGIR", # Phase 1
+                # "SIGIR", # Phase 1
                 # "SIGMOD",
                 # "SIGCOMM",
 
-                # "KDD", # Phase 2
+                "KDD", # Phase 2
                 # "ICML",
 
                 # "FSE", # Phase 3
@@ -135,7 +146,10 @@ def main():
 
     searchers = [
                     # SimpleSearcher(**config.PARAMS),
-                    Searcher(**config.PARAMS),
+                    # RegressionSearcher(**config.PARAMS),
+                    # Searcher(**config.PARAMS),
+                    # ProjectedSearcher(**config.PARAMS),
+                    IterProjectedSearcher(**config.PARAMS),
 
                 ]
 
@@ -158,19 +172,37 @@ def main():
 
             if s.name() == "SimpleSearcher":
                 s.set_params(**{
-                              'age_relev': .5, # .5, .7, .08
+                              'age_relev': .08, # .5, .7, .08
                               })
 
             if s.name() == "MultiLayered":
                 s.set_params(**{
                               'H': 1,
-                              'age_relev': 0.01, # 0.01
+                              'age_relev': 0.1, # 0.01
                               'papers_relev': .99, # .99
                               'authors_relev': .01, # .01
                               # 'words_relev': .2,
                               # 'venues_relev' : .2,
-                              'author_affils_relev': .95, # .95, .99, .99
+                              'author_affils_relev': .99, # .95, .99, .99
                               'alpha': 0.01}) # .01, .35, .25
+
+            if s.name() == "ProjectedLayered":
+                s.set_params(**{
+                          'H': 0,
+                          'age_relev': .0, # .0
+                          'alpha': 0.7, # .7
+                          })
+
+            if s.name() == "IterProjectedLayered":
+                s.set_params(**{
+                          'H': 0,
+                          'age_relev': .0, # .0
+                          # 'papers_relev': .7, # .99
+                          # 'authors_relev': .3, # .01
+                          'author_affils_relev': .9, # .95
+                          'alpha': .9, # .9 (easy_search)
+                          'affil_relev': 1.0
+                          })
 
             rfile = get_results_file(c, s.name())
             get_search_metrics(selected_affils, ground_truth, c, year, s,\

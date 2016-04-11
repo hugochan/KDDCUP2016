@@ -67,7 +67,7 @@ MIN_TOPIC_VALUE = 0.1
 KEYWORDS = "keywords"
 
 # The placeholders are for parameters <dataset>, <K> and <H>, correspondingly
-IN_MODELS_FOLDER = DATA + "models/%s_%d"
+IN_MODELS_FOLDER = DATA + "models/%s/%s_%d"
 OUT_MODELS_FOLDER = "out_models"
 
 
