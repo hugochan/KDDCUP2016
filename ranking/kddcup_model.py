@@ -1240,12 +1240,15 @@ class ModelBuilder:
     edges = self.edges_lookup.subgraph(docs)
     weighted_edges = self.get_weights_file(edges)
 
+    paper_authors = defaultdict()
     paper_affils = defaultdict()
     for each in docs:
+      author1 = set(pubs[each]['author'].keys())
       affil1 = set([y for x in pubs[each]['author'].values() for y in x])
+      paper_authors[each] = author1
       paper_affils[each] = affil1
 
-    return docs, weighted_edges, paper_affils
+    return docs, weighted_edges, paper_authors, paper_affils
 
 
   def get_projected_affils_layer(self, conf_name, year, age_relev, exclude):
@@ -1491,7 +1494,7 @@ class ModelBuilder:
 
   def get_ranked_affils_by_papers(self, conf_name, year, age_relev, n_hops, alpha, exclude=[]):
 
-    docs, citation_edges, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude)
+    docs, citation_edges, _, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude)
     # 1) run pagerank on paper layer
     graph = self.assemble_layers(docs, citation_edges,
                    None, None, None, None,
@@ -1521,6 +1524,36 @@ class ModelBuilder:
 
 
   def get_ranked_affils_by_authors(self, conf_name, year, age_relev, n_hops, alpha, exclude=[]):
+    # # 0)
+    # docs, citation_edges, paper_authors, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude)
+    # # run pagerank on author layer
+    # graph = self.assemble_layers(docs, citation_edges,
+    #                None, None, None, None,
+    #                None, None, None)
+
+    # paper_scores = rank_single_layer_nodes(graph, alpha=alpha)
+    # paper_scores = {graph.node[nid]['entity_id']: float(score) for nid, score in paper_scores.items()}
+
+
+    # # computes affil scores
+    # author_scores = defaultdict()
+    # for each_doc in docs:
+    #   if not paper_authors.has_key(each_doc):
+    #     continue
+    #   # normalized score
+    #   # count = float(len(author_affils[each_author]))
+
+    #   score = paper_scores[each_doc]
+    #   # directed affiliateship
+    #   for each_author in paper_authors[each_doc]:
+    #     try:
+    #       author_scores[each_author] += score
+    #     except:
+    #       author_scores[each_author] = score
+
+
+
+
     # 1) page layer -> author layer
     authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude)
 
@@ -1533,12 +1566,12 @@ class ModelBuilder:
     author_scores = {graph.node[nid]['entity_id']: float(score) for nid, score in author_scores.items()}
 
 
-    # graph2 = self.assemble_layers(None, None,
-    #                authors, None, coauthor_edges, None,
-    #                None, None, None)
+    graph2 = self.assemble_layers(None, None,
+                   authors, None, coauthor_edges, None,
+                   None, None, None)
 
-    # auth_mapping = {graph2.node[x]['entity_id']:x for x in graph2.nodes()}
-    # W = nx.stochastic_graph(graph2, weight='weight') # create a copy in (right) stochastic form
+    auth_mapping = {graph2.node[x]['entity_id']:x for x in graph2.nodes()}
+    W = nx.stochastic_graph(graph2, weight='weight') # create a copy in (right) stochastic form
 
     # import pdb;pdb.set_trace()
     # 2) compute affil scores
@@ -1625,6 +1658,32 @@ class ModelBuilder:
 
 
   def build_projected_layers2(self, conf_name, year, age_relev, n_hops, alpha, exclude=[]):
+    # # 0)
+    # docs, citation_edges, paper_authors, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude)
+    # # run pagerank on author layer
+    # graph = self.assemble_layers(docs, citation_edges,
+    #                None, None, None, None,
+    #                None, None, None)
+
+    # paper_scores = rank_single_layer_nodes(graph, alpha=alpha)
+    # paper_scores = {graph.node[nid]['entity_id']: float(score) for nid, score in paper_scores.items()}
+
+
+    # # computes affil scores
+    # author_scores = defaultdict()
+    # for each_doc in docs:
+    #   if not paper_authors.has_key(each_doc):
+    #     continue
+    #   # normalized score
+    #   # count = float(len(author_affils[each_author]))
+
+    #   score = paper_scores[each_doc]
+    #   # directed affiliateship
+    #   for each_author in paper_authors[each_doc]:
+    #     try:
+    #       author_scores[each_author] += score
+    #     except:
+    #       author_scores[each_author] = score
 
 
 
@@ -1698,7 +1757,7 @@ class ModelBuilder:
 
 
 
-    # docs, citation_edges, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude)
+    # docs, citation_edges, _, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude)
 
     # graph = self.assemble_layers(docs, citation_edges,
     #                authors, author_author_edges, None, None,

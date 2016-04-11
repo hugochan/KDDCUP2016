@@ -28,6 +28,179 @@ from networkx.algorithms.centrality.katz import katz_centrality
 #                               'author_affils_relev': .3, # .3
 # }
 
+
+
+# Metropolis Hastings
+def pagerank2(G, alpha=0.85, pers=None, max_iter=100,
+                         tol=1.0e-8, nstart=None, weight='weight', node_types=None):
+    """Return the PageRank of the nodes in the graph.
+
+    PageRank computes a ranking of the nodes in the graph G based on
+    the structure of the incoming links. It was originally designed as
+    an algorithm to rank web pages.
+
+    Parameters
+    -----------
+    G : graph
+        A NetworkX graph
+
+    alpha : float, optional
+        Damping parameter for PageRank, default=0.85
+
+    pers: dict, optional
+         The "pers vector" consisting of a dictionary with a
+         key for every graph node and nonzero pers value for each node.
+
+    max_iter : integer, optional
+        Maximum number of iterations in power method eigenvalue solver.
+
+    tol : float, optional
+        Error tolerance used to check convergence in power method solver.
+
+    nstart : dictionary, optional
+        Starting value of PageRank iteration for each node.
+
+    weight : key, optional
+        Edge data key to use as weight. If None weights are set to 1.
+
+    Returns
+    -------
+    pagerank : dictionary
+         Dictionary of nodes with PageRank as value
+
+    Notes
+    -----
+    The eigenvector calculation is done by the power iteration method
+    and has no guarantee of convergence.    The iteration will stop
+    after max_iter iterations or an error tolerance of
+    number_of_nodes(G)*tol has been reached.
+    """
+
+    if len(G) == 0:
+            return {}
+
+    # create a copy in (right) stochastic form
+    W=nx.stochastic_graph(G, weight=weight)
+    out_degree = W.out_degree()
+    # import pdb;pdb.set_trace()
+    for node in W:
+        for k, v in W[node].iteritems():
+            v[weight] *= min(1, float(out_degree[node])/out_degree[k] if out_degree[k] else 1)
+        W[node][node] = {weight: 1 - sum([y for x in W[node].values() for y in x.values()])}
+
+
+
+#   W = G
+    scale=1.0/W.number_of_nodes()
+
+    # choose fixed starting vector if not given
+    if nstart is None:
+            x=dict.fromkeys(W,scale)
+    else:
+            x=nstart
+            # normalize starting vector to 1
+            s=1.0/sum(x.values())
+            for k in x: x[k]*=s
+
+    # assign uniform pers vector if not given
+    if pers is None:
+            pers=dict.fromkeys(W,scale)
+    else:
+            # Normalize the sum to 1
+            s=sum(pers.values())
+#           p=pers/sum(pers)
+            for k in pers.keys():
+                pers[k] /= s
+
+            if len(pers)!=len(G):
+                    raise Exception('Personalization vector must have a value for every node')
+
+
+    # "dangling" nodes, no links out from them
+    out_degree=W.out_degree()
+    dangle=[n for n in W if out_degree[n]==0.0]
+
+    i=0
+    while True: # power iteration: make up to max_iter iterations
+            xlast=x
+            x=dict.fromkeys(xlast.keys(), 0)
+
+            # "dangling" nodes only consume energies, so we release these energies manually
+            danglesum=alpha*scale*sum(xlast[n] for n in dangle)
+            # danglesum = 0
+
+            for n in x:
+                    # this matrix multiply looks odd because it is
+                    # doing a left multiply x^T=xlast^T*W
+                    for nbr in W[n]:
+                        try:
+                            x[nbr] += alpha*xlast[n]*W[n][nbr][weight]
+                        except:
+                            import pdb;pdb.set_trace()
+#                           c[nbr] += 1
+#                           if node_types :
+#                               l[nbr][node_types[n]]+= dx
+#                           if node_types[nbr]==0 :
+#                               print node_types[nbr], dx
+#                               print
+
+                    # x[n] += danglesum
+                    # if G.node[n]['type'] == 'affil':
+                    #     for kk, vv in pers.items():
+                    #         if G.node[kk]['type'] == 'affil':
+                    #             x[n] += (1-params['author_affils_relev'])*(1-alpha)*vv*xlast[kk]
+                    #         elif G.node[kk]['type'] == 'author':
+                    #             x[n] += params['author_affils_relev']*(1-alpha)*vv*xlast[kk]
+                    # elif G.node[n]['type'] == 'author':
+                    #     for kk, vv in pers.items():
+                    #         if G.node[kk]['type'] == 'author':
+                    #             x[n] += (1-params['author_affils_relev']-params['authors_relev'])*(1-alpha)*vv*xlast[kk]
+
+                    #         elif G.node[kk]['type'] == 'affil':
+                    #             x[n] += params['author_affils_relev']*(1-alpha)*vv*xlast[kk]
+
+                    #         elif G.node[kk]['type'] == 'paper':
+                    #             x[n] += params['authors_relev']*(1-alpha)*vv*xlast[kk]
+                    # elif G.node[n]['type'] == 'paper':
+                    #     for kk, vv in pers.items():
+                    #         if G.node[kk]['type'] == 'paper':
+                    #             x[n] += params['papers_relev']*(1-alpha)*vv*xlast[kk]
+
+                    #         elif G.node[kk]['type'] == 'author':
+
+                    #             x[n] += params['authors_relev']*(1-alpha)*vv*xlast[kk]
+
+                    x[n]+=danglesum+(1-alpha)*pers[n]
+                    # x[n]+=danglesum+(1-alpha)*np.array(pers.values()).dot(np.array(xlast.values()))
+#                   l[n][4]+=danglesum+(1.0-alpha)*pers[n]
+
+            # normalize vector
+            s=1.0/sum(x.values())
+            for n in x:
+                    x[n]*=s
+#                   l[n]*=s
+
+#           print c[637], ' '.join(map(str,np.round(100*l[637],3))), "\t", \
+#                       c[296], ' '.join(map(str,np.round(100*l[296],3)))
+
+            # check convergence, l1 norm
+            err=sum([abs(x[n]-xlast[n]) for n in x])
+            if err < tol:
+                    break
+            if i>max_iter:
+                    raise Exception('pagerank: power iteration failed to converge '
+                                                            'in %d iterations.'%(i-1))
+            i+=1
+
+    # Returns:
+    #   x: PageRank of each node;
+    #   l: Detailed contributions of each layer;
+    #   i: Iterations to converge.
+    return x, i
+
+
+
+
 def pagerank(G, alpha=0.85, pers=None, max_iter=100,
                          tol=1.0e-8, nstart=None, weight='weight', node_types=None):
     """Return the PageRank of the nodes in the graph.

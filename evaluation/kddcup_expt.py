@@ -89,8 +89,8 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
 
     elif searcher.name() == "IterProjectedLayered":
         expand_year = []
-        # results = searcher.easy_search(selected_affils, conf_name, year, exclude_papers)
-        results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
+        results = searcher.easy_search(selected_affils, conf_name, year, exclude_papers)
+        # results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
 
     else:
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
@@ -147,9 +147,9 @@ def main():
     searchers = [
                     # SimpleSearcher(**config.PARAMS),
                     # RegressionSearcher(**config.PARAMS),
-                    # Searcher(**config.PARAMS),
+                    Searcher(**config.PARAMS),
                     # ProjectedSearcher(**config.PARAMS),
-                    IterProjectedSearcher(**config.PARAMS),
+                    # IterProjectedSearcher(**config.PARAMS),
 
                 ]
 
@@ -184,7 +184,7 @@ def main():
                               # 'words_relev': .2,
                               # 'venues_relev' : .2,
                               'author_affils_relev': .99, # .95, .99, .99
-                              'alpha': 0.01}) # .01, .35, .25
+                              'alpha': 0.1}) # .01, .35, .25
 
             if s.name() == "ProjectedLayered":
                 s.set_params(**{

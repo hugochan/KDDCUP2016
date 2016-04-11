@@ -301,6 +301,7 @@ class Searcher:
                             year,
                             None,
                             self.params['H'],
+                            None,
                             self.params['min_topic_lift'],
                             self.params['min_ngram_lift'],
                             self.name(), exclude_papers, force, load=True, save=self.save)
