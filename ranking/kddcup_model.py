@@ -268,8 +268,9 @@ class ModelBuilder:
       # Expand the docs by getting more papers from the targeted conference
       # expanded_pubs = self.get_expanded_pubs_by_conf(conf_name, [2009, 2010])
       nodes = set(docs)
-      expanded_year = []
-      # expanded_year = range(2005, 2011)
+      # expanded_year = []
+      expanded_year = range(2005, 2011)
+
       expanded_pubs = self.get_expanded_pubs_by_conf2(conf_name, expanded_year)
 
       # add year
@@ -316,7 +317,7 @@ class ModelBuilder:
 
     year_str = ",".join(["'%s'" % y for y in year])
     year_cond =  " AND year IN (%s)"%year_str if year_str else ''
-    expanded_pubs = db.select(["paper_id", "year"], "expanded_conf_papers", where="conf_id='%s'%s"%(conf_id, year_cond))
+    expanded_pubs = db.select(["paper_id", "year"], "expanded_conf_papers2", where="conf_id='%s'%s"%(conf_id, year_cond))
 
     return expanded_pubs
 
@@ -1330,7 +1331,7 @@ class ModelBuilder:
     return affils, affil_affil_edges
 
 
-  def get_projected_author_layer(self, conf_name, year, age_relev, exclude):
+  def get_projected_author_layer(self, conf_name, year, age_relev, exclude, expanded_year=[]):
     """
     projects paper layer onto author layer.
     """
@@ -1340,6 +1341,16 @@ class ModelBuilder:
 
     pubs, authors, _ = get_selected_expand_pubs(conf_name, year)
     docs = set(pubs.keys()) - set(exclude)
+
+    if expanded_year:
+      conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
+      pubs2, authors2, _ = get_selected_expand_pubs(conf_id, expanded_year, _type="expanded")
+      docs2 = set(pubs2.keys()) - set(exclude)
+      docs.update(docs2)
+      pubs.update(pubs2)
+      authors.update(authors2)
+
+
 
     self.edges_lookup = GraphBuilder(get_all_edges(docs))
     edges = self.edges_lookup.subgraph(docs)
@@ -1523,7 +1534,7 @@ class ModelBuilder:
 
 
 
-  def get_ranked_affils_by_authors(self, conf_name, year, age_relev, n_hops, alpha, exclude=[]):
+  def get_ranked_affils_by_authors(self, conf_name, year, age_relev, n_hops, alpha, exclude=[], expanded_year=[]):
     # # 0)
     # docs, citation_edges, paper_authors, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude)
     # # run pagerank on author layer
@@ -1555,7 +1566,7 @@ class ModelBuilder:
 
 
     # 1) page layer -> author layer
-    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude)
+    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude, expanded_year)
 
     # 1) run pagerank on author layer
     graph = self.assemble_layers(None, None,

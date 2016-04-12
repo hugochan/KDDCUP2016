@@ -427,14 +427,14 @@ class IterProjectedSearcher:
 
 
 
-    def easy_search(self, selected_affils, conf_name, year, exclude_papers=[]):
+    def easy_search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[]):
         """
 
         """
         builder = kddcup_model.ModelBuilder()
 
         # scores = builder.get_ranked_affils_by_papers(conf_name, year, self.params['age_relev'], self.params['H'], self.params['alpha'], exclude=exclude_papers)
-        scores = builder.get_ranked_affils_by_authors(conf_name, year, self.params['age_relev'], self.params['H'], self.params['alpha'], exclude=exclude_papers)
+        scores = builder.get_ranked_affils_by_authors(conf_name, year, self.params['age_relev'], self.params['H'], self.params['alpha'], exclude=exclude_papers, expanded_year=expanded_year)
 
         results = get_selected_nodes(scores, selected_affils)
 

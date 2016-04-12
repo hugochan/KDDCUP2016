@@ -1228,6 +1228,12 @@ def import_more_conf_pubs(conf_name):
     elif conf_name == 'SIGCOMM':
         from datasets.expanded_SIGCOMM import py_sigcomm
         db.insert(into=table_name, fields=fields, values=py_sigcomm, ignore=True)
+    elif conf_name == 'KDD':
+        from datasets.expanded_KDD import py_kdd
+        db.insert(into=table_name, fields=fields, values=py_kdd, ignore=True)
+    elif conf_name == 'ICML':
+        from datasets.expanded_ICML import py_icml
+        db.insert(into=table_name, fields=fields, values=py_icml, ignore=True)
 
 # for SimpleSearcher
 def get_selected_expand_pubs(conf, year, _type="selected"):
@@ -1260,7 +1266,7 @@ def get_selected_expand_pubs(conf, year, _type="selected"):
         conf_cond = "%s.venue_abbr_name IN %s"%(table_name, conf_str) if conf_str else ""
 
     elif _type == 'expanded':
-        table_name = "%s_conf_papers" % _type
+        table_name = "%s_conf_papers2" % _type
         col_id_name = "paper_id"
         conf_cond = "%s.conf_id IN %s"%(table_name, conf_str) if conf_str else ""
 
@@ -1343,8 +1349,10 @@ def get_selected_expand_pubs(conf, year, _type="selected"):
 if __name__ == '__main__':
     # import_papers(config.DATA + 'Papers/Papers.txt')
     # import_authors('/Volumes/Mixed-Data/data/MAG/Authors/Authors.txt')
-    import_more_conf_pubs('SIGIR')
-    import_more_conf_pubs('SIGMOD')
-    import_more_conf_pubs('SIGCOMM')
+    # import_more_conf_pubs('SIGIR')
+    # import_more_conf_pubs('SIGMOD')
+    # import_more_conf_pubs('SIGCOMM')
+    import_more_conf_pubs('KDD')
+    import_more_conf_pubs('ICML')
     # get_conf_pubs(conf_id='460A7036', year=range(2000,2011))
     # pass
