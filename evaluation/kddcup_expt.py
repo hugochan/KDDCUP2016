@@ -88,11 +88,11 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
         results = searcher.search(selected_affils, conf_name, year, expand_year=expand_year)
 
     elif searcher.name() == "IterProjectedLayered":
-        # expand_year = []
-        expand_year = range(2005, 2011)
+        expand_year = []
+        # expand_year = range(2005, 2011)
 
-        results = searcher.easy_search(selected_affils, conf_name, year, exclude_papers, expand_year)
-        # results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
+        # results = searcher.easy_search(selected_affils, conf_name, year, exclude_papers, expand_year)
+        results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
 
     else:
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
@@ -174,12 +174,12 @@ def main():
 
             if s.name() == "SimpleSearcher":
                 s.set_params(**{
-                              'age_relev': .08, # .5, .7, .08
+                              'age_relev': .0, # .5, .7, .08
                               })
 
             if s.name() == "MultiLayered":
                 s.set_params(**{
-                              'H': 1,
+                              'H': 0,
                               'age_relev': 0.1, # 0.01
                               'papers_relev': .99, # .99
                               'authors_relev': .01, # .01

@@ -241,7 +241,7 @@ class ModelBuilder:
     return [(u, v, 1.0) for (u, v) in edges]
 
 
-  def get_pubs_layer(self, conf_name, year, n_hops, exclude_list=[], expand_method='conf'):
+  def get_pubs_layer(self, conf_name, year, n_hops, exclude_list=[], expand_method='n_hops'):
     """
     First documents are retrieved from pub records of a targeted conference.
     Then we follow n_hops from these nodes to have the first layer of the graph (papers).
@@ -252,6 +252,7 @@ class ModelBuilder:
     docs = zip(*pubs)[0]
     # add year
     self.pub_years = dict(pubs)
+
 
     if expand_method == 'n_hops':
 
@@ -268,7 +269,6 @@ class ModelBuilder:
       # Expand the docs by getting more papers from the targeted conference
       # expanded_pubs = self.get_expanded_pubs_by_conf(conf_name, [2009, 2010])
       nodes = set(docs)
-      # expanded_year = []
       expanded_year = range(2005, 2011)
 
       expanded_pubs = self.get_expanded_pubs_by_conf2(conf_name, expanded_year)
@@ -312,6 +312,9 @@ class ModelBuilder:
     return expanded_pubs
 
   def get_expanded_pubs_by_conf2(self, conf_name, year):
+    if not year:
+      return []
+
     # Expand the docs by getting more papers from the targeted conference
     conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
 
@@ -1229,13 +1232,21 @@ class ModelBuilder:
     return list(affils), list(author_affil_edges), list(affil_affil_edges)
 
 
-  def get_paper_affils(self, conf_name, year, age_relev, exclude):
+  def get_paper_affils(self, conf_name, year, age_relev, exclude=[], expanded_year=[]):
 
     current_year = config.PARAMS['current_year']
     old_year = config.PARAMS['old_year']
 
     pubs, _, affils = get_selected_expand_pubs(conf_name, year)
     docs = set(pubs.keys()) - set(exclude)
+
+    if expanded_year:
+      conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
+      pubs2, _, affils2 = get_selected_expand_pubs(conf_id, expanded_year, _type="expanded")
+      docs2 = set(pubs2.keys()) - set(exclude)
+      docs.update(docs2)
+      pubs.update(pubs2)
+      affils.update(affils2)
 
     self.edges_lookup = GraphBuilder(get_all_edges(docs))
     edges = self.edges_lookup.subgraph(docs)
@@ -1252,7 +1263,7 @@ class ModelBuilder:
     return docs, weighted_edges, paper_authors, paper_affils
 
 
-  def get_projected_affils_layer(self, conf_name, year, age_relev, exclude):
+  def get_projected_affils_layer(self, conf_name, year, age_relev, exclude=[], expanded_year=[]):
     """
     directly projects paper and author layers onto affil layer.
     """
@@ -1262,6 +1273,15 @@ class ModelBuilder:
 
     pubs, _, affils = get_selected_expand_pubs(conf_name, year)
     docs = set(pubs.keys()) - set(exclude)
+
+    if expanded_year:
+      conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
+      pubs2, _, affils2 = get_selected_expand_pubs(conf_id, expanded_year, _type="expanded")
+      docs2 = set(pubs2.keys()) - set(exclude)
+      docs.update(docs2)
+      pubs.update(pubs2)
+      affils.update(affils2)
+
 
     self.edges_lookup = GraphBuilder(get_all_edges(docs))
     edges = self.edges_lookup.subgraph(docs)
@@ -1331,10 +1351,11 @@ class ModelBuilder:
     return affils, affil_affil_edges
 
 
-  def get_projected_author_layer(self, conf_name, year, age_relev, exclude, expanded_year=[]):
+  def get_projected_author_layer(self, conf_name, year, age_relev, exclude=[], expanded_year=[]):
     """
     projects paper layer onto author layer.
     """
+    print 'age_relev: %s' % age_relev
 
     current_year = config.PARAMS['current_year']
     old_year = config.PARAMS['old_year']
@@ -1424,7 +1445,7 @@ class ModelBuilder:
 
 
 
-  def build(self, conf_name, year, n_hops, min_topic_lift, min_ngram_lift, exclude=[]):
+  def build(self, conf_name, year, n_hops, min_topic_lift, min_ngram_lift, exclude=[], expanded_year=[]):
     """
     Build graph model from given conference.
     """
@@ -1474,7 +1495,7 @@ class ModelBuilder:
     return graph
 
 
-  def build_affils(self, conf_name, year, age_relev, n_hops, exclude=[]):
+  def build_affils(self, conf_name, year, age_relev, n_hops, exclude=[], expanded_year=[]):
     """
     Build graph model from given conference.
     """
@@ -1488,7 +1509,7 @@ class ModelBuilder:
     # log.debug("%d authors, %d co-authorship edges and %d authorship edges." % (
     #   len(authors), len(coauth_edges), len(auth_edges)))
 
-    affils, affil_affil_edges = self.get_projected_affils_layer(conf_name, year, age_relev, exclude)
+    affils, affil_affil_edges = self.get_projected_affils_layer(conf_name, year, age_relev, exclude, expanded_year)
 
     graph = self.assemble_layers(None, None,
                    None, None, None, None,
@@ -1503,9 +1524,9 @@ class ModelBuilder:
     return graph
 
 
-  def get_ranked_affils_by_papers(self, conf_name, year, age_relev, n_hops, alpha, exclude=[]):
+  def get_ranked_affils_by_papers(self, conf_name, year, age_relev, n_hops, alpha, exclude=[], expanded_year=[]):
 
-    docs, citation_edges, _, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude)
+    docs, citation_edges, _, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude, expanded_year)
     # 1) run pagerank on paper layer
     graph = self.assemble_layers(docs, citation_edges,
                    None, None, None, None,
@@ -1616,9 +1637,9 @@ class ModelBuilder:
     return affil_scores
 
 
-  def build_projected_layers(self, conf_name, year, age_relev, n_hops, alpha, exclude=[]):
+  def build_projected_layers(self, conf_name, year, age_relev, n_hops, alpha, exclude=[], expanded_year=[]):
     # 1) page layer -> author layer
-    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude)
+    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude, expanded_year)
 
     # run pagerank on author layer
     graph = self.assemble_layers(None, None,
@@ -1668,7 +1689,7 @@ class ModelBuilder:
     return graph
 
 
-  def build_projected_layers2(self, conf_name, year, age_relev, n_hops, alpha, exclude=[]):
+  def build_projected_layers2(self, conf_name, year, age_relev, n_hops, alpha, exclude=[], expanded_year=[]):
     # # 0)
     # docs, citation_edges, paper_authors, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude)
     # # run pagerank on author layer
@@ -1699,7 +1720,7 @@ class ModelBuilder:
 
 
     # 1) page layer -> author layer
-    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude)
+    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude, expanded_year)
 
     # run pagerank on author layer
     graph = self.assemble_layers(None, None,

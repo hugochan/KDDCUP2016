@@ -25,7 +25,7 @@ builder = None
 db = MyMySQL(db=config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
 
 
-def build_graph(conf_name, year, age_relev, H, alpha, min_topic_lift, min_ngram_lift, alg, exclude=[], force=False, save=True, load=False):
+def build_graph(conf_name, year, age_relev, H, alpha, min_topic_lift, min_ngram_lift, alg, exclude=[], expanded_year=[], force=False, save=True, load=False):
     """
     Utility method to build and return the graph model. First we check if a graph file
     exists. If not, we check if the builder class is already instantiated. If not, we do
@@ -53,7 +53,7 @@ def build_graph(conf_name, year, age_relev, H, alpha, min_topic_lift, min_ngram_
 
         elif alg == 'IterProjectedLayered':
             # graph = builder.build_projected_layers(conf_name, year, age_relev, H, alpha, exclude)
-            graph = builder.build_projected_layers2(conf_name, year, age_relev, H, alpha, exclude)
+            graph = builder.build_projected_layers2(conf_name, year, age_relev, H, alpha, exclude, expanded_year)
 
         # Stores gexf copy for caching purposes
         if save:
@@ -304,7 +304,7 @@ class Searcher:
                             None,
                             self.params['min_topic_lift'],
                             self.params['min_ngram_lift'],
-                            self.name(), exclude_papers, force, load=True, save=self.save)
+                            self.name(), exclude_papers, [], force, load=True, save=self.save)
 
         # Store number of nodes for checking later
         self.nnodes = graph.number_of_nodes()
@@ -441,7 +441,7 @@ class IterProjectedSearcher:
         return results
 
 
-    def search(self, selected_affils, conf_name, year, exclude_papers=[], rtype="affil", force=False):
+    def search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], rtype="affil", force=False):
         """
         Checks if the graph model already exists, otherwise creates one and
         runs the ranking on the nodes.
@@ -453,7 +453,7 @@ class IterProjectedSearcher:
                             self.params['alpha'],
                             self.params['min_topic_lift'],
                             self.params['min_ngram_lift'],
-                            self.name(), exclude_papers, force, load=True, save=self.save)
+                            self.name(), exclude_papers, expanded_year, force, load=True, save=self.save)
 
         # Store number of nodes for checking later
         self.nnodes = graph.number_of_nodes()
