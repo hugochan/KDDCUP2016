@@ -516,7 +516,7 @@ class IterProjectedSearcher:
         scores = rank_nodes_mle(authors, author_authors, affils, author_affils)
 
 
-        get_selected_nodes(scores, selected_affils)
+        results = get_selected_nodes(scores, selected_affils)
 
 
         # Adds the score to the nodes and writes to disk. A stupid cast

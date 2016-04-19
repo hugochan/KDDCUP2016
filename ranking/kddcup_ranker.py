@@ -455,9 +455,9 @@ def rank_nodes_mle(authors, author_authors, affils, author_affils, beta=1.0):
     global_affilidx = affil_idx
 
     # import pdb;pdb.set_trace()
-    scores, f, d = optimize.fmin_l_bfgs_b(object_func, np.zeros(len(global_affilidx)), fprime=fprime, bounds=[(0.0, 1.0) for i in xrange(len(global_affilidx))])
+    scores, f, d = optimize.fmin_l_bfgs_b(object_func, np.zeros(len(global_affilidx)), fprime=fprime, bounds=[(0.0, None) for i in xrange(len(global_affilidx))])
 
-    import pdb;pdb.set_trace()
+    # import pdb;pdb.set_trace()
     affil_scores = {x:scores[global_affilidx[x]] for x in affils}
 
     return affil_scores
