@@ -5,7 +5,8 @@ Created on Mar 14, 2016
 '''
 
 from datasets.mag import get_selected_expand_pubs
-from ranking.kddcup_ranker import rank_nodes, rank_single_layer_nodes, rank_author_affil_nodes, rank_projected_nodes, rank_paper_author_affil_nodes
+from ranking.kddcup_ranker import rank_nodes, rank_single_layer_nodes, rank_author_affil_nodes, \
+            rank_projected_nodes, rank_paper_author_affil_nodes, rank_nodes_mle
 import kddcup_model
 import utils
 import config
@@ -54,6 +55,9 @@ def build_graph(conf_name, year, age_relev, H, alpha, min_topic_lift, min_ngram_
         elif alg == 'IterProjectedLayered':
             # graph = builder.build_projected_layers(conf_name, year, age_relev, H, alpha, exclude)
             graph = builder.build_projected_layers2(conf_name, year, age_relev, H, alpha, exclude, expanded_year)
+
+        # elif alg == 'IterProjectedLayered_mle':
+            # graph = builder.build_projected_author_layer(conf_name, year, age_relev, H, alpha, exclude, expanded_year)
 
         # Stores gexf copy for caching purposes
         if save:
@@ -114,6 +118,7 @@ def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=Fa
                     except:
                         affil_scores[each] = score2
 
+    # import pdb;pdb.set_trace()
     # we only rank the selected affiliations
     if selected_affils:
         selected_affil_scores = get_selected_nodes(affil_scores, selected_affils)
@@ -183,24 +188,28 @@ def regression_search(selected_affils, conf_name, year, expand_year=[]):
             target.append(.0)
         training_data.append(sample)
 
+    # import pdb;pdb.set_trace()
+
     training_data = np.array(training_data)
     target = np.array(target)
 
-    poly = PolynomialFeatures(3)
-    new_features = poly.fit_transform(training_data)
+    # poly = PolynomialFeatures(3)
+    # new_features = poly.fit_transform(training_data)
 
     lr = LinearRegression()
     # lr = BayesianRidge()
     # lr = TheilSenRegressor(random_state=42)
     # lr = RANSACRegressor(random_state=42)
-    lr.fit(new_features, target)
+    # lr.fit(new_features, target)
+    lr.fit(training_data, target)
 
     test_data = np.hstack((training_data[:, 1:], target.reshape(target.shape[0], 1)))
-    test_data = poly.fit_transform(test_data)
+    # test_data = poly.fit_transform(test_data)
 
-    preds = lr.predict(test_data)
+    # preds = lr.predict(test_data)
+    preds = test_data.sum(1)
     pred_affil_scores = dict(zip(affils, preds))
-    print "score: %s" % lr.score(new_features, target)
+    # print "score: %s" % lr.score(new_features, target)
 
     # we only rank the selected affiliations
     if selected_affils:
@@ -359,7 +368,7 @@ class ProjectedSearcher:
         return self.graph
 
 
-    def search(self, selected_affils, conf_name, year, exclude_papers=[], rtype="affil", force=False):
+    def search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], rtype="affil", force=False):
         """
         Checks if the graph model already exists, otherwise creates one and
         runs the ranking on the nodes.
@@ -368,9 +377,10 @@ class ProjectedSearcher:
                             year,
                             self.params['age_relev'],
                             self.params['H'],
+                            self.params['alpha'],
                             self.params['min_topic_lift'],
                             self.params['min_ngram_lift'],
-                            self.name(), exclude_papers, force, load=True, save=self.save)
+                            self.name(), exclude_papers, expanded_year, force, load=True, save=self.save)
 
         # Store number of nodes for checking later
         self.nnodes = graph.number_of_nodes()
@@ -478,6 +488,51 @@ class IterProjectedSearcher:
 
         return results
 
+
+
+    def mle_search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], rtype="affil", force=False):
+        """
+        A probabilistic generative model using maximal likelihood estimate.
+        """
+
+        # graph = build_graph(conf_name,
+        #                     year,
+        #                     self.params['age_relev'],
+        #                     self.params['H'],
+        #                     self.params['alpha'],
+        #                     self.params['min_topic_lift'],
+        #                     self.params['min_ngram_lift'],
+        #                     '%s_mle'%self.name(), exclude_papers, expanded_year, force, load=True, save=self.save)
+
+        # # Store number of nodes for checking later
+        # self.nnodes = graph.number_of_nodes()
+
+        builder = kddcup_model.ModelBuilder()
+        authors, author_authors, affils, author_affils = builder.build_projected_author_layer(\
+                                        conf_name, year, self.params['age_relev'], self.params['H'], \
+                                        self.params['alpha'], exclude_papers, expanded_year)
+
+        # Rank nodes using subgraph
+        scores = rank_nodes_mle(authors, author_authors, affils, author_affils)
+
+
+        get_selected_nodes(scores, selected_affils)
+
+
+        # Adds the score to the nodes and writes to disk. A stupid cast
+        # is required because write_gexf can't handle np.float64
+        # scores = {nid: float(score) for nid, score in scores.items()}
+        # nx.set_node_attributes(graph, "score", scores)
+
+        # nx.write_gexf(graph, utils.get_graph_file_name(model_folder, query))
+
+        # Returns the top values of the type of node of interest
+        # results = get_top_nodes(graph, scores.items(), limit=selected_affils, return_type=rtype)
+
+        # Add to class object for future access
+        # self.graph = graph
+
+        return results
 
 
 

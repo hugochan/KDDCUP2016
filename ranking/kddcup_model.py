@@ -1799,6 +1799,28 @@ class ModelBuilder:
 
 
 
+  def build_projected_author_layer(self, conf_name, year, age_relev, n_hops, alpha, exclude=[], expanded_year=[]):
+    # 1) page layer -> author layer
+    authors, author_author_edges, _, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude, expanded_year)
+    affils = set([y for x in author_affils.values() for y in x])
+    # author_affil_edges = [(k, y, 1.0) for k, v in author_affils.iteritems() for y in v]
+    author_authors = defaultdict()
+    for k, v, w in author_author_edges:
+      try:
+        author_authors[k][v] = w
+      except:
+        author_authors[k] = {v:w}
+
+    # graph = self.assemble_layers(None, None,
+    #                authors, author_author_edges, None, None,
+    #                affils, author_affil_edges, None, None, None)
+
+    # return graph
+
+    return authors, author_authors, affils, author_affils
+
+
+
 if __name__ == '__main__':
   log.basicConfig(format='%(asctime)s [%(levelname)s] : %(message)s', level=log.INFO)
   mb = ModelBuilder()

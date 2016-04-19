@@ -7,6 +7,7 @@ Created on Mar 15, 2016
 import os
 import sys
 import numpy as np
+from scipy import optimize
 import networkx as nx
 import logging as log
 import logging
@@ -364,6 +365,105 @@ def pagerank(G, alpha=0.85, pers=None, max_iter=100,
 #           graph.remove_node(node)
 
 
+
+def get_delta(authors, author_affils, affil_score):
+    global global_authoridx, global_affilidx
+
+    nauthors = len(authors)
+    Delta = np.zeros((nauthors, nauthors))
+
+    for author1 in authors:
+        b = sum([affil_score[global_affilidx[x]] for x in author_affils[author1]]) if author1 in author_affils else 0.0
+        for author2 in authors:
+            if author1 == author2:    continue
+
+            a = sum([affil_score[global_affilidx[x]] for x in author_affils[author2]]) if author2 in author_affils else 0.0
+            Delta[global_authoridx[author1]][global_authoridx[author2]] = a - b
+
+    return Delta
+
+
+global global_authoridx, global_affilidx, global_beta, global_authors, global_affils, global_author_authors, global_author_affils
+
+
+def object_func(affil_score):
+    """
+    object function
+    """
+    global global_authoridx, global_beta, global_authors, global_author_authors, global_author_affils
+
+    Delta = get_delta(global_authors, global_author_affils, affil_score)
+    prob = lambda (author1, author2, cond): np.log(1.0/( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]))) \
+            if cond else np.log(1.0 - 1.0/( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]])))
+
+    # sum_edges = sum([np.log(1.0/( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]))) \
+    #         for author1, v in global_author_authors.iteritems() for author2, w in v.iteritems()])
+
+    obj_func = sum([prob((author1, author2, author1 in global_author_authors and author2 in global_author_authors[author1])) \
+            for author1 in global_authors for author2 in global_authors if not author1 == author2])
+
+    return obj_func
+
+
+def fprime(affil_score):
+    """
+    gradient of object function
+    """
+
+    global global_authoridx, global_affilidx, global_beta, global_authors, global_affils, global_author_authors, global_author_affils
+    Delta = get_delta(global_authors, global_author_affils, affil_score)
+
+    # gradient of Delta
+    # delta_Delta =
+
+    # gradient
+    delta_prob = lambda (author1, author2, affil, cond): global_beta * ((1.0 if author2 in global_author_affils and affil in global_author_affils[author2] else 0.0) - (1.0 if author1 in global_author_affils and affil in global_author_affils[author1] else 0.0)) \
+            * np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]) / ( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]])) \
+            if cond else -global_beta * ((1.0 if author2 in global_author_affils and affil in global_author_affils[author2] else 0.0) - (1.0 if author1 in global_author_affils and affil in global_author_affils[author1] else 0.0)) / ( 1.0 + np.exp(-global_beta * \
+                Delta[global_authoridx[author1]][global_authoridx[author2]]))
+
+    delta_obj = np.array([sum([delta_prob((author1, author2, affil, author1 in global_author_authors and author2 in global_author_authors[author1])) \
+            for author1 in global_authors for author2 in global_authors if not author1 == author2]) for affil in global_affils])
+
+    return delta_obj
+
+
+def rank_nodes_mle(authors, author_authors, affils, author_affils, beta=1.0):
+    # delta = get_delta(author_affils, author1, author2, affil_score)
+    # p = 1.0/( 1.0 + np.exp(-beta * delta))
+    global global_authoridx, global_affilidx, global_beta, global_authors, global_affils, global_author_authors, global_author_affils
+
+    global_beta = beta
+    global_authors = list(authors)
+    global_affils = list(affils)
+    global_author_authors = author_authors
+    global_author_affils = author_affils
+
+    idx = 0
+    author_idx = defaultdict()
+    for author in global_authors:
+        author_idx[author] = idx
+        idx += 1
+    global_authoridx = author_idx
+
+
+    idx = 0
+    affil_idx = defaultdict()
+    for affil in affils:
+        affil_idx[affil] = idx
+        idx += 1
+    global_affilidx = affil_idx
+
+    # import pdb;pdb.set_trace()
+    scores, f, d = optimize.fmin_l_bfgs_b(object_func, np.zeros(len(global_affilidx)), fprime=fprime, bounds=[(0.0, 1.0) for i in xrange(len(global_affilidx))])
+
+    import pdb;pdb.set_trace()
+    affil_scores = {x:scores[global_affilidx[x]] for x in affils}
+
+    return affil_scores
+
+
+
 # for IterProjectedLayered approach
 # Two-stage projection: Paper -> Author -> Affil
 def rank_projected_nodes(graph, alpha=0.3, affil_relev=0.3, out_file=None, stats_file=None, **kwargs):
@@ -431,6 +531,7 @@ def rank_projected_nodes(graph, alpha=0.3, affil_relev=0.3, out_file=None, stats
 
     # Run page rank on the constructed graph
     scores, _niters = pagerank(graph, alpha=(1.0-alpha), pers=pers, node_types=None, max_iter=10000)
+
 
     return scores
 

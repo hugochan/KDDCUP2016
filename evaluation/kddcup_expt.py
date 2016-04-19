@@ -87,12 +87,19 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
         # expand_year = range(2005, 2011)
         results = searcher.search(selected_affils, conf_name, year, expand_year=expand_year)
 
+    elif searcher.name() == "ProjectedLayered":
+        expand_year = []
+        # expand_year = range(2005, 2011)
+
+        results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
+
     elif searcher.name() == "IterProjectedLayered":
         expand_year = []
         # expand_year = range(2005, 2011)
 
         # results = searcher.easy_search(selected_affils, conf_name, year, exclude_papers, expand_year)
-        results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
+        # results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
+        results = searcher.mle_search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
 
     else:
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
@@ -134,11 +141,11 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
 def main():
 
     confs = [
-                # "SIGIR", # Phase 1
+                "SIGIR", # Phase 1
                 # "SIGMOD",
                 # "SIGCOMM",
 
-                "KDD", # Phase 2
+                # "KDD", # Phase 2
                 # "ICML",
 
                 # "FSE", # Phase 3
@@ -177,6 +184,11 @@ def main():
                               'age_relev': .0, # .5, .7, .08
                               })
 
+            if s.name() == "RegressionSearcher":
+                s.set_params(**{
+                              'age_relev': .0, # .5, .7, .08
+                              })
+
             if s.name() == "MultiLayered":
                 s.set_params(**{
                               'H': 0,
@@ -201,8 +213,8 @@ def main():
                           'age_relev': .0, # .0
                           # 'papers_relev': .7, # .99
                           # 'authors_relev': .3, # .01
-                          'author_affils_relev': .9, # .95
-                          'alpha': .9, # .9 (easy_search)
+                          'author_affils_relev': .95, # .95
+                          'alpha': .6, # .9 (easy_search)
                           'affil_relev': 1.0
                           })
 
