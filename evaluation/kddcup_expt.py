@@ -14,7 +14,8 @@ import cPickle
 # from baselines.scholar import match_by_title
 from evaluation.metrics import ndcg2
 from datasets.mag import get_selected_docs
-from ranking.kddcup_searchers import simple_search, SimpleSearcher, RegressionSearcher, Searcher, ProjectedSearcher, IterProjectedSearcher
+from ranking.kddcup_searchers import simple_search, SimpleSearcher, RegressionSearcher, \
+                    Searcher, ProjectedSearcher, IterProjectedSearcher, StatSearcher
 
 
 # log.basicConfig(format='%(asctime)s [%(levelname)s] : %(message)s', level=log.INFO)
@@ -101,6 +102,13 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
         # results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
         results = searcher.mle_search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
 
+    elif searcher.name() == "StatSearcher":
+        # expand_year = []
+        expand_year = range(2005, 2011)
+
+        results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
+
+
     else:
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
 
@@ -141,11 +149,11 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
 def main():
 
     confs = [
-                "SIGIR", # Phase 1
+                # "SIGIR", # Phase 1
                 # "SIGMOD",
                 # "SIGCOMM",
 
-                # "KDD", # Phase 2
+                "KDD", # Phase 2
                 # "ICML",
 
                 # "FSE", # Phase 3
@@ -158,8 +166,8 @@ def main():
                     # RegressionSearcher(**config.PARAMS),
                     # Searcher(**config.PARAMS),
                     # ProjectedSearcher(**config.PARAMS),
-                    IterProjectedSearcher(**config.PARAMS),
-
+                    # IterProjectedSearcher(**config.PARAMS),
+                    StatSearcher(**config.PARAMS)
                 ]
 
     # import pdb;pdb.set_trace()
@@ -175,6 +183,7 @@ def main():
         #         count += 1
         # print "%s/%s"%(count, len(ground_truth))
         exclude_papers = zip(*get_selected_docs(c, "2015"))[0]
+        # exclude_papers = []
 
         for s in searchers :
             print "Running %s." % s.name()
@@ -216,6 +225,12 @@ def main():
                           'author_affils_relev': .95, # .95
                           'alpha': .6, # .9 (easy_search)
                           'affil_relev': 1.0
+                          })
+
+            if s.name() == "StatSearcher":
+                s.set_params(**{
+                          'H': 0,
+                          'age_relev': .0, # .0
                           })
 
             rfile = get_results_file(c, s.name())

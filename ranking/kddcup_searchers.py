@@ -6,7 +6,7 @@ Created on Mar 14, 2016
 
 from datasets.mag import get_selected_expand_pubs
 from ranking.kddcup_ranker import rank_nodes, rank_single_layer_nodes, rank_author_affil_nodes, \
-            rank_projected_nodes, rank_paper_author_affil_nodes, rank_nodes_mle
+            rank_projected_nodes, rank_paper_author_affil_nodes, rank_nodes_mle, rank_nodes_stat
 import kddcup_model
 import utils
 import config
@@ -58,6 +58,9 @@ def build_graph(conf_name, year, age_relev, H, alpha, min_topic_lift, min_ngram_
 
         # elif alg == 'IterProjectedLayered_mle':
             # graph = builder.build_projected_author_layer(conf_name, year, age_relev, H, alpha, exclude, expanded_year)
+
+        # elif alg == 'StatSearcher':
+        #     graph = builder.build_stat_layer(conf_name, year, age_relev, H, alpha, exclude, expanded_year)
 
         # Stores gexf copy for caching purposes
         if save:
@@ -534,6 +537,57 @@ class IterProjectedSearcher:
 
         return results
 
+
+
+class StatSearcher:
+    """
+    Basic searcher class for the Statistic method.
+    """
+
+    def __init__(self, **params):
+        self.params = params
+        self.save = True
+
+    def name(self):
+        return "StatSearcher"
+
+    def set_save(self, save):
+        self.save = save
+
+    def set_params(self, **params):
+        for k, v in params.items():
+            self.params[k] = v
+
+    def set_param(self, name, value):
+        self.params[name] = value
+
+    def number_of_nodes(self):
+        """ Return number of nodes if search was called once. """
+        return self.nnodes
+
+    def get_nx_graph(self):
+        """ Return networkx graph structured if search method was called once. """
+        return self.graph
+
+    def search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], rtype="affil", force=False):
+        """
+        Checks if the graph model already exists, otherwise creates one and
+        runs the ranking on the nodes.
+        """
+
+        builder = kddcup_model.ModelBuilder()
+        author_graph, author_affils, author_per_paper_dist, author_scores = builder.build_stat_layer(\
+                                        conf_name, year, self.params['age_relev'], self.params['H'], \
+                                        exclude_papers, expanded_year)
+
+
+        # Rank nodes
+        scores = rank_nodes_stat(author_graph, author_affils, author_per_paper_dist, author_scores)
+
+        results = get_selected_nodes(scores, selected_affils)
+
+
+        return results
 
 
 

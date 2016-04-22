@@ -21,8 +21,10 @@ import utils
 from config import DATA, PARAMS
 import cPickle
 import time
+import itertools
 from networkx.algorithms.centrality.katz import katz_centrality
 
+old_settings = np.seterr(all='warn', over='raise')
 
 # params=                           {  'papers_relev': .5, # .5
 #                               'authors_relev': .5, # .5
@@ -384,28 +386,45 @@ def get_delta(authors, author_affils, affil_score):
 
 
 global global_authoridx, global_affilidx, global_beta, global_authors, global_affils, global_author_authors, global_author_affils
+gama = 1.0
 
-
-def object_func(affil_score):
+def object_func(affil_score, sign=1):
     """
     object function
     """
     global global_authoridx, global_beta, global_authors, global_author_authors, global_author_affils
 
     Delta = get_delta(global_authors, global_author_affils, affil_score)
-    prob = lambda (author1, author2, cond): np.log(1.0/( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]))) \
-            if cond else np.log(1.0 - 1.0/( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]])))
 
-    # sum_edges = sum([np.log(1.0/( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]))) \
-    #         for author1, v in global_author_authors.iteritems() for author2, w in v.iteritems()])
+    obj_func = 0
 
-    obj_func = sum([prob((author1, author2, author1 in global_author_authors and author2 in global_author_authors[author1])) \
-            for author1 in global_authors for author2 in global_authors if not author1 == author2])
+    with np.errstate(divide='raise'):
+        try:
+            # prob = lambda (author1, author2, cond): np.log(1.0/( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]))) \
+            #     if cond else np.log(1.0 - 1.0/( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]])))
 
-    return obj_func
+            prob = lambda (author1, author2, cond): global_author_authors[author1][author2] * global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]] - np.log(1.0 + np.exp(global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]])) \
+                            if cond else -1 * gama * np.log(1.0 + np.exp(global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]))
+
+            # obj_func = sum([prob((author1, author2, author1 in global_author_authors and author2 in global_author_authors[author1])) \
+            #     for author1 in global_authors for author2 in global_authors if not author1 == author2])
+            for author1 in global_authors:
+                for author2 in global_authors:
+                    if author1 == author2:
+                        continue
+
+                    # weighted sum
+                    obj_func += prob((author1, author2, author1 in global_author_authors and author2 in global_author_authors[author1]))
+
+        except Exception, e:
+            print e
+            import pdb;pdb.set_trace()
 
 
-def fprime(affil_score):
+    return sign * obj_func
+
+
+def fprime(affil_score, sign=1):
     """
     gradient of object function
     """
@@ -413,19 +432,16 @@ def fprime(affil_score):
     global global_authoridx, global_affilidx, global_beta, global_authors, global_affils, global_author_authors, global_author_affils
     Delta = get_delta(global_authors, global_author_affils, affil_score)
 
-    # gradient of Delta
-    # delta_Delta =
-
     # gradient
-    delta_prob = lambda (author1, author2, affil, cond): global_beta * ((1.0 if author2 in global_author_affils and affil in global_author_affils[author2] else 0.0) - (1.0 if author1 in global_author_affils and affil in global_author_affils[author1] else 0.0)) \
+    delta_prob = lambda (author1, author2, affil, cond): global_author_authors[author1][author2] * global_beta * ((1.0 if author2 in global_author_affils and affil in global_author_affils[author2] else 0.0) - (1.0 if author1 in global_author_affils and affil in global_author_affils[author1] else 0.0)) \
             * np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]) / ( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]])) \
-            if cond else -global_beta * ((1.0 if author2 in global_author_affils and affil in global_author_affils[author2] else 0.0) - (1.0 if author1 in global_author_affils and affil in global_author_affils[author1] else 0.0)) / ( 1.0 + np.exp(-global_beta * \
+            if cond else -1 * gama * global_beta * ((1.0 if author2 in global_author_affils and affil in global_author_affils[author2] else 0.0) - (1.0 if author1 in global_author_affils and affil in global_author_affils[author1] else 0.0)) / ( 1.0 + np.exp(-global_beta * \
                 Delta[global_authoridx[author1]][global_authoridx[author2]]))
 
     delta_obj = np.array([sum([delta_prob((author1, author2, affil, author1 in global_author_authors and author2 in global_author_authors[author1])) \
             for author1 in global_authors for author2 in global_authors if not author1 == author2]) for affil in global_affils])
 
-    return delta_obj
+    return sign * delta_obj
 
 
 def rank_nodes_mle(authors, author_authors, affils, author_affils, beta=1.0):
@@ -434,14 +450,14 @@ def rank_nodes_mle(authors, author_authors, affils, author_affils, beta=1.0):
     global global_authoridx, global_affilidx, global_beta, global_authors, global_affils, global_author_authors, global_author_affils
 
     global_beta = beta
-    global_authors = list(authors)
-    global_affils = list(affils)
+    global_authors = authors
+    global_affils = affils
     global_author_authors = author_authors
     global_author_affils = author_affils
 
     idx = 0
     author_idx = defaultdict()
-    for author in global_authors:
+    for author in authors:
         author_idx[author] = idx
         idx += 1
     global_authoridx = author_idx
@@ -455,13 +471,279 @@ def rank_nodes_mle(authors, author_authors, affils, author_affils, beta=1.0):
     global_affilidx = affil_idx
 
     # import pdb;pdb.set_trace()
-    scores, f, d = optimize.fmin_l_bfgs_b(object_func, np.zeros(len(global_affilidx)), fprime=fprime, bounds=[(0.0, None) for i in xrange(len(global_affilidx))])
+    # scores, f, d = optimize.fmin_l_bfgs_b(object_func, np.zeros(len(affil_idx)),\
+    #              fprime=fprime, bounds=[(0.0, None) for i in xrange(len(affil_idx))], epsilon=1e-04, disp=1)
 
-    # import pdb;pdb.set_trace()
+    # cons = ({'type': 'eq',
+    #         'fun' : lambda x: np.array([sum(x) - 1.0]), # x1 + ... + xn = 1
+    #         'jac' : lambda x: np.array([1.0 for i in xrange(len(x))])}
+    #         )
+    cons = ()
+
+    # method = 'SLSQP'
+    method = 'L-BFGS-B'
+
+    res = optimize.minimize(object_func, np.zeros(len(affil_idx)), args=(-1.0,), \
+            jac=fprime, bounds=[(0.0, 1.0) for i in xrange(len(affil_idx))], \
+            constraints=cons, method=method, options={
+            'disp': True,
+            'factr': 1e7,
+            'ftol': 1e-09,
+            'maxiter': 50,
+            'gtol': 1e-06
+            })
+
+    print res
+    scores = res.x
+
     affil_scores = {x:scores[global_affilidx[x]] for x in affils}
 
     return affil_scores
 
+
+
+def rank_nodes_stat(author_graph, author_affils, author_per_paper_dist, author_scores):
+    n_paper = 200.0
+    new_author_per_paper_dist = {k:int(round(v*n_paper)) for k, v in author_per_paper_dist.iteritems()}
+    pred_authorships = []
+    author_idx = match_authorid_idx(author_graph)
+
+    W = nx.stochastic_graph(author_graph, weight='weight')
+
+    # shifted distribution
+    # epsilon = 1e-6
+    # dist = np.array(author_scores.values())
+    # new_dist = (dist + epsilon)/sum(dist + epsilon)
+    # author_scores = dict(zip(author_scores.keys(), new_dist.tolist()))
+
+    # import pdb;pdb.set_trace()
+    for nauthor, npaper in new_author_per_paper_dist.iteritems():
+        # 3)
+        # import pdb;pdb.set_trace()
+        # dependency_coauth_struct = find_dependency_coauth_struct(nauthor, author_scores, W, author_idx)
+
+        for i in xrange(npaper):
+            # 1) randomly choose authors
+            coauthors = ezpred_coauthors(nauthor, author_scores)
+
+            # 2) randomly choose root author, then search coauthors
+            # coauthors = []
+            # while not coauthors:
+            #     coauthors = pred_coauthors(nauthor, author_scores, W, author_idx)
+
+
+            # 3) randomly choose dependency coauthor structures
+            # dependency_coauth_struct = find_dependency_coauth_struct(nauthor, author_scores, W, author_idx)
+
+            # coauthors = pred_coauth_struct(dependency_coauth_struct)
+
+
+
+
+            pred_authorships.append(coauthors)
+
+    # print 'diff: %s' % len(pred_authorships) - n_paper
+    # print len(pred_authorships)
+
+    # affil_scores = calc_affil_scores(pred_authorships, author_affils)
+    affil_scores = calc_affil_occurrences(pred_authorships, author_affils)
+    return affil_scores
+
+
+def match_authorid_idx(author_graph):
+    author_idx = defaultdict()
+    for each in author_graph.nodes():
+        author_idx[author_graph.node[each]['entity_id']] = each
+
+    return author_idx
+
+
+
+
+################################################################################
+# for each paper, randomly choose a dependency coauthor structure
+################################################################################
+
+def pred_coauth_struct(dependency_coauth_struct):
+    # np.random.choice only supports 1-dimensional pool
+    # do some mapping
+    idxs = range(len(dependency_coauth_struct[0]))
+    idx = np.random.choice(idxs, 1, replace=False, p=dependency_coauth_struct[1])[0]
+    coauthors = dependency_coauth_struct[0][idx]
+    return coauthors
+
+
+def find_dependency_coauth_struct(nauthor, author_scores, author_graph, author_idx):
+    dependency_coauth_struct = []
+
+    for root_author in author_scores.keys():
+        existing_authors = [root_author]
+
+        # find other authors based on existing authors
+        count = 1
+        while count < nauthor:
+            selector = defaultdict(float)
+            for each_existing_author in existing_authors:
+
+                for nbr, weight in author_graph[author_idx[each_existing_author]].iteritems():
+                    nbr_id = author_graph.node[nbr]['entity_id']
+                    if nbr_id in existing_authors:
+                        continue
+
+                    selector[nbr_id] += weight['weight']
+
+            # select the best fit
+            if selector:
+                # one = max(selector.keys(), key=lambda k: selector[k]) # fixed
+                selector = normalize(selector)
+                one = np.random.choice(selector.keys(), 1, replace=False, p=selector.values())[0]
+
+                existing_authors.append(one)
+                count += 1
+
+            else:
+                # print "fails to fetch enough coauthors. retry ..."
+                break
+
+        if count == nauthor:
+            dependency_coauth_struct.append(sorted(existing_authors))
+
+
+
+    # remove duplicate structs
+    dependency_coauth_struct.sort()
+    dependency_coauth_struct = list(k for k, _ in itertools.groupby(dependency_coauth_struct))
+
+    # rank dependency coauthor structures
+    ranking_denpendency_coauth_struct = []
+    for struct in dependency_coauth_struct:
+        score = 0.0
+        for each_author in struct:
+            score += author_scores[each_author]
+
+        ranking_denpendency_coauth_struct.append([struct, score])
+
+    # normalize
+    tmp = zip(*ranking_denpendency_coauth_struct)
+    norm_score = (np.array(tmp[1])/sum(np.array(tmp[1]))).tolist()
+    # norm_ranking_dependency_coauth_struct = zip(*[tmp[0], norm_score])
+
+    return [tmp[0], norm_score]
+
+
+
+
+################################################################################
+# for each paper, randomly choose a root author, then search his/her coauthors
+################################################################################
+
+def pred_coauthors(nauthor, author_scores, author_graph, author_idx):
+
+    # author_graph = author_graph.copy()
+
+    root_author = np.random.choice(author_scores.keys(), 1, replace=False, p=author_scores.values())[0]
+    existing_authors = [root_author]
+
+    # find other authors based on existing authors
+    count = 1
+    while count < nauthor:
+        selector = defaultdict(float)
+        for each_existing_author in existing_authors:
+            # if not author_idx[each_existing_author] in author_graph:
+            #     continue
+
+            for nbr, weight in author_graph[author_idx[each_existing_author]].iteritems():
+                nbr_id = author_graph.node[nbr]['entity_id']
+                if nbr_id in existing_authors:
+                    continue
+
+                selector[nbr_id] += weight['weight']
+
+        # select the best fit
+        if selector:
+            # one = max(selector.keys(), key=lambda k: selector[k]) # fixed
+            selector = normalize(selector)
+            one = np.random.choice(selector.keys(), 1, replace=False, p=selector.values())[0]
+
+            existing_authors.append(one)
+            count += 1
+
+            # author_graph.remove_node(author_idx[one])
+            # stochastic_graph(author_graph, copy=False, weight='weight')
+
+        else:
+            # print "fails to fetch enough coauthors. retry ..."
+            # return []
+
+            # randomly choose one
+            one = np.random.choice(author_scores.keys(), 1, replace=False, p=author_scores.values())[0]
+            while one in existing_authors:
+                one = np.random.choice(author_scores.keys(), 1, replace=False, p=author_scores.values())[0]
+
+            existing_authors.append(one)
+            count += 1
+
+            # author_graph.remove_node(author_idx[one])
+            # stochastic_graph(author_graph, copy=False, weight='weight')
+
+    return existing_authors
+
+
+
+################################################################################
+# for each paper, randomly choose all the authors
+################################################################################
+
+
+def ezpred_coauthors(nauthor, author_scores):
+    """
+    randomly choose authors for a paper based on author citation distribution
+    """
+    pred_coauthors = np.random.choice(author_scores.keys(), nauthor, replace=False, p=author_scores.values())
+    return pred_coauthors
+
+
+
+
+
+def calc_affil_scores(authorships, author_affils):
+    """
+    calc affil scores based on authorships
+    """
+    affil_scores = defaultdict(float)
+
+    for authors in authorships:
+        score1 = 1.0 / len(authors)
+        for each_author in authors:
+            affils = author_affils[each_author]
+            if not affils:
+                continue
+
+            score2 = score1 / len(affils)
+            for each_affil in affils:
+                affil_scores[each_affil] += score2
+
+    return affil_scores
+
+
+def calc_affil_occurrences(authorships, author_affils):
+    """
+    calc affil scores based on authorships
+    """
+    affil_occurrences = defaultdict(float)
+
+    # for authors in authorships:
+    #     affils = set([y for x in authors for y in author_affils[x]])
+    #     for each_affil in affils:
+    #         affil_occurrences[each_affil] += 1
+
+    for authors in authorships:
+        for each_author in authors:
+            affils = author_affils[each_author]
+            for each_affil in affils:
+                affil_occurrences[each_affil] += 1
+
+    return affil_occurrences
 
 
 # for IterProjectedLayered approach
@@ -1109,6 +1391,10 @@ def test_attenuators() :
     # Age attenuator
 #   f = lambda x: np.exp(-5*o*(1-x))
 
+def normalize(x):
+  sums = sum(x.values())
+  xx = {k:v/sums for k, v in x.iteritems()}
+  return xx
 
 
 

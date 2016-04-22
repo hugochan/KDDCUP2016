@@ -1252,10 +1252,10 @@ def get_selected_expand_pubs(conf, year, _type="selected"):
         raise TypeError("Parameter 'conf_id' is of unsupported type. String or iterable needed.")
 
     if isinstance(year, basestring):
-        year_str = "(%s)"%str(year)
+        year_str = "%s"%str(year)
 
     elif hasattr(year, '__iter__'): # length of tuple should be larger than 1, otherwise use string
-        year_str = str(tuple(year))
+        year_str = ",".join(["%s" % x for x in year])
 
     else:
         raise TypeError("Parameter 'year' is of unsupported type. String or iterable needed.")
@@ -1273,7 +1273,7 @@ def get_selected_expand_pubs(conf, year, _type="selected"):
     else:
         raise ValueError("Unknown parameter type. parameter type should either be 'selected' or 'expanded'")
 
-    year_cond = "%s.year IN %s"%(table_name, year_str) if year else ""
+    year_cond = "%s.year IN (%s)"%(table_name, year_str) if year else ""
 
     if year_cond != '' and conf_cond != '':
         where_cond = '%s AND %s'%(year_cond, conf_cond)

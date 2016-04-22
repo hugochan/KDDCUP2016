@@ -6,6 +6,7 @@ Created on Mar 14, 2016
 
 import chardet
 import numpy as np
+import matplotlib.pyplot as plt
 import networkx as nx
 from mymysql import MyMySQL
 from collections import defaultdict
@@ -361,12 +362,9 @@ class ModelBuilder:
     rows = db.select(["paper_id", "author_id"], "paper_author_affils", where="paper_id IN (%s)"%paper_str)
 
     rows = set(rows) # Removing duplicate records
-    author_papers = defaultdict()
+    author_papers = defaultdict(set)
     for paper, author in rows:
-      try:
-        author_papers[author].add(paper)
-      except:
-        author_papers[author] = set([paper])
+      author_papers[author].add(paper)
 
     coauthorships = []
     authors = author_papers.keys()
@@ -1380,15 +1378,12 @@ class ModelBuilder:
 
 
     # coauthor edges
-    author_affils = defaultdict()
+    author_affils = defaultdict(set)
     co_authors = defaultdict()
     for each_doc in docs:
       # add author-affils
       for k, v in pubs[each_doc]['author'].iteritems():
-        try:
-          author_affils[k].update(v)
-        except:
-          author_affils[k] = v
+        author_affils[k].update(v)
 
 
       year = min(max(pubs[each_doc]['year'], old_year), current_year)
@@ -1442,6 +1437,98 @@ class ModelBuilder:
         author_author_edges.add((k, each, weight))
 
     return authors, author_author_edges, coauthor_edges, author_affils
+
+
+
+
+  def get_paper_author_dist(self, conf_name, year, age_relev, exclude=[], expanded_year=[]):
+    """
+    get paper and author distribution.
+    """
+
+    current_year = config.PARAMS['current_year']
+    old_year = config.PARAMS['old_year']
+
+    pubs, authors, _ = get_selected_expand_pubs(conf_name, year)
+    docs = set(pubs.keys()) - set(exclude)
+
+    if expanded_year:
+      conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
+      pubs2, authors2, _ = get_selected_expand_pubs(conf_id, expanded_year, _type="expanded")
+      docs2 = set(pubs2.keys()) - set(exclude)
+      docs.update(docs2)
+      pubs.update(pubs2)
+      authors.update(authors2)
+
+
+
+    self.edges_lookup = GraphBuilder(get_all_edges(docs))
+    edges = self.edges_lookup.subgraph(docs)
+
+    # import pdb;pdb.set_trace()
+
+
+    # coauthor edges
+    author_affils = defaultdict(set)
+    author_npubs = dict.fromkeys(authors, 0.0)
+    co_authors = defaultdict()
+    for each_doc in docs:
+      # add author-affils
+      for k, v in pubs[each_doc]['author'].iteritems():
+        author_npubs[k] += 1
+        author_affils[k].update(v)
+
+      year = min(max(pubs[each_doc]['year'], old_year), current_year)
+      age_decay = np.exp(-(age_relev)*(current_year-year)) # ranges from [0, 1]
+
+      auths = list(set(pubs[each_doc]['author'].keys()))
+      for i in xrange(len(auths) - 1):
+        for j in xrange(i + 1, len(auths)):
+          auth1 = min(auths[i], auths[j])
+          auth2 = max(auths[i], auths[j])
+          if co_authors.has_key(auth1):
+            if co_authors[auth1].has_key(auth2):
+              co_authors[auth1][auth2] += age_decay
+            else:
+              co_authors[auth1][auth2] = age_decay
+          else:
+            co_authors[auth1] = {auth2: age_decay}
+
+
+    coauthor_edges = set()
+    for k, v in co_authors.iteritems():
+      for each, count in v.iteritems():
+        weight = np.log10(1.0 + count)
+        coauthor_edges.add((k, each, weight))
+
+
+    # # of authors per paper distribution
+    paper_nauthor = {x:len(pubs[x]['author']) for x in docs}
+    author_per_paper_dist = defaultdict(float)
+    for _, v in paper_nauthor.iteritems():
+      author_per_paper_dist[v] += 1.0
+
+
+
+    # # of citations per author
+    author_ncites = dict.fromkeys(authors, 0.0)
+
+    for k, v in edges:
+      # paper k cites paper v
+      year = min(max(pubs[k]['year'], old_year), current_year)
+      age_decay = np.exp(-(age_relev)*(current_year-year)) # ranges from [0, 1]
+
+      auths = set([x for x in pubs[v]['author'].keys()])
+      for each_author in auths:
+        try:
+          author_ncites[each_author] += age_decay
+        except:
+          author_ncites[each_author] = age_decay
+
+
+
+    return authors, coauthor_edges, author_affils, author_per_paper_dist, author_ncites, author_npubs
+
 
 
 
@@ -1536,7 +1623,7 @@ class ModelBuilder:
     paper_scores = {graph.node[nid]['entity_id']: float(score) for nid, score in paper_scores.items()}
 
     # 2) compute affil scores
-    affil_scores = defaultdict()
+    affil_scores = defaultdict(float)
     for each_doc in docs:
       if not paper_affils.has_key(each_doc):
         continue
@@ -1546,10 +1633,7 @@ class ModelBuilder:
       score = paper_scores[each_doc]
       # directed affiliateship
       for each_affil in paper_affils[each_doc]:
-        try:
-          affil_scores[each_affil] += score
-        except:
-          affil_scores[each_affil] = score
+        affil_scores[each_affil] += score
 
     return affil_scores
 
@@ -1607,7 +1691,7 @@ class ModelBuilder:
 
     # import pdb;pdb.set_trace()
     # 2) compute affil scores
-    affil_scores = defaultdict()
+    affil_scores = defaultdict(float)
     for each_author in authors:
       if not author_affils.has_key(each_author):
         continue
@@ -1617,10 +1701,7 @@ class ModelBuilder:
       score = author_scores[each_author]
       # directed affiliateship
       for each_affil in author_affils[each_author]:
-        try:
-          affil_scores[each_affil] += score
-        except:
-          affil_scores[each_affil] = score
+        affil_scores[each_affil] += score
 
 
       # # one-hop affiliateship (having coathor belong to that affil)
@@ -1733,7 +1814,7 @@ class ModelBuilder:
 
 
     # 1) computes affil scores
-    affil_scores = defaultdict()
+    affil_scores = defaultdict(float)
     for each_author in authors:
       if not author_affils.has_key(each_author):
         continue
@@ -1743,10 +1824,7 @@ class ModelBuilder:
       score = author_scores[each_author]
       # directed affiliateship
       for each_affil in author_affils[each_author]:
-        try:
-          affil_scores[each_affil] += score
-        except:
-          affil_scores[each_affil] = score
+        affil_scores[each_affil] += score
 
 
 
@@ -1804,12 +1882,9 @@ class ModelBuilder:
     authors, author_author_edges, _, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude, expanded_year)
     affils = set([y for x in author_affils.values() for y in x])
     # author_affil_edges = [(k, y, 1.0) for k, v in author_affils.iteritems() for y in v]
-    author_authors = defaultdict()
+    author_authors = defaultdict(dict)
     for k, v, w in author_author_edges:
-      try:
-        author_authors[k][v] = w
-      except:
-        author_authors[k] = {v:w}
+      author_authors[k][v] = w
 
     # graph = self.assemble_layers(None, None,
     #                authors, author_author_edges, None, None,
@@ -1819,6 +1894,45 @@ class ModelBuilder:
 
     return authors, author_authors, affils, author_affils
 
+
+  def build_stat_layer(self, conf_name, year, age_relev, n_hops, exclude=[], expanded_year=[]):
+    """
+    get the distribution info of layers and build co-author layer
+    """
+
+    authors, coauthor_edges, author_affils, author_per_paper_dist, author_ncites, author_npubs = self.get_paper_author_dist(conf_name, year, age_relev, exclude, expanded_year)
+
+    author_graph = self.assemble_layers(None, None,
+                   authors, None, coauthor_edges, None,
+                   None, None, None, None, None)
+
+    # import pdb;pdb.set_trace()
+    # x = sorted(author_npubs.items(), key=lambda d:d[1], reverse=True)
+    # ezplot(range(len(zip(*x)[0])), zip(*x)[1], title='author - citations (%s)'%', '.join(year) if hasattr(year, '__iter__') else year, xlabel='rank of authors', ylabel='citation')
+    # ezplot(author_per_paper_dist.keys(), np.array(author_per_paper_dist.values())/sum(author_per_paper_dist.values()), title='# of authors per paper distribution (%s)'%', '.join(year) if hasattr(year, '__iter__') else year, xlabel='# of authors per paper', ylabel='percentage')
+    author_per_paper_dist = normalize(author_per_paper_dist)
+    author_scores = normalize(author_npubs)
+
+    return author_graph, author_affils, author_per_paper_dist, author_scores
+
+
+def normalize(x):
+  sums = sum(x.values())
+  xx = {k:v/sums for k, v in x.iteritems()}
+  return xx
+
+def ezplot(x, y, **kwargs):
+  plt.plot(x, y)
+  if 'title' in kwargs:
+    plt.title(kwargs['title'])
+
+  if 'xlabel' in kwargs:
+    plt.xlabel(kwargs['xlabel'])
+
+  if 'ylabel' in kwargs:
+    plt.ylabel(kwargs['ylabel'])
+
+  plt.show()
 
 
 if __name__ == '__main__':
