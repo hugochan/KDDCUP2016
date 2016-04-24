@@ -403,18 +403,30 @@ def object_func(affil_score, sign=1):
             # prob = lambda (author1, author2, cond): np.log(1.0/( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]))) \
             #     if cond else np.log(1.0 - 1.0/( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]])))
 
-            prob = lambda (author1, author2, cond): global_author_authors[author1][author2] * global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]] - np.log(1.0 + np.exp(global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]])) \
-                            if cond else -1 * gama * np.log(1.0 + np.exp(global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]))
+            prob = lambda (author1, author2): global_author_authors[author1][author2] * global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]] - np.log(1.0 + np.exp(global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]))
 
-            # obj_func = sum([prob((author1, author2, author1 in global_author_authors and author2 in global_author_authors[author1])) \
-            #     for author1 in global_authors for author2 in global_authors if not author1 == author2])
             for author1 in global_authors:
                 for author2 in global_authors:
                     if author1 == author2:
                         continue
 
-                    # weighted sum
-                    obj_func += prob((author1, author2, author1 in global_author_authors and author2 in global_author_authors[author1]))
+                    if author1 in global_author_authors and author2 in global_author_authors[author1]:
+                        obj_func += prob((author1, author2))
+
+            # prob = lambda (author1, author2, cond): global_author_authors[author1][author2] * global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]] - np.log(1.0 + np.exp(global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]])) \
+            #                 if cond else \
+            #                 0.0
+            #                 # -1 * gama * np.log(1.0 + np.exp(global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]))
+
+            # # obj_func = sum([prob((author1, author2, author1 in global_author_authors and author2 in global_author_authors[author1])) \
+            # #     for author1 in global_authors for author2 in global_authors if not author1 == author2])
+            # for author1 in global_authors:
+            #     for author2 in global_authors:
+            #         if author1 == author2:
+            #             continue
+
+            #         # weighted sum
+            #         obj_func += prob((author1, author2, author1 in global_author_authors and author2 in global_author_authors[author1]))
 
         except Exception, e:
             print e
@@ -432,19 +444,34 @@ def fprime(affil_score, sign=1):
     global global_authoridx, global_affilidx, global_beta, global_authors, global_affils, global_author_authors, global_author_affils
     Delta = get_delta(global_authors, global_author_affils, affil_score)
 
-    # gradient
-    delta_prob = lambda (author1, author2, affil, cond): global_author_authors[author1][author2] * global_beta * ((1.0 if author2 in global_author_affils and affil in global_author_affils[author2] else 0.0) - (1.0 if author1 in global_author_affils and affil in global_author_affils[author1] else 0.0)) \
-            * np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]) / ( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]])) \
-            if cond else -1 * gama * global_beta * ((1.0 if author2 in global_author_affils and affil in global_author_affils[author2] else 0.0) - (1.0 if author1 in global_author_affils and affil in global_author_affils[author1] else 0.0)) / ( 1.0 + np.exp(-global_beta * \
-                Delta[global_authoridx[author1]][global_authoridx[author2]]))
+    # # gradient
+    # delta_prob = lambda (author1, author2, affil, cond): global_author_authors[author1][author2] * global_beta * ((1.0 if author2 in global_author_affils and affil in global_author_affils[author2] else 0.0) - (1.0 if author1 in global_author_affils and affil in global_author_affils[author1] else 0.0)) \
+    #         * np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]) / ( 1.0 + np.exp(-global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]])) \
+    #         if cond else \
+    #         0.0
 
-    delta_obj = np.array([sum([delta_prob((author1, author2, affil, author1 in global_author_authors and author2 in global_author_authors[author1])) \
-            for author1 in global_authors for author2 in global_authors if not author1 == author2]) for affil in global_affils])
+    #          # -1 * gama * global_beta * ((1.0 if author2 in global_author_affils and affil in global_author_affils[author2] else 0.0) - (1.0 if author1 in global_author_affils and affil in global_author_affils[author1] else 0.0)) / ( 1.0 + np.exp(-global_beta * \
+    #          #    Delta[global_authoridx[author1]][global_authoridx[author2]]))
+
+    # delta_obj = np.array([sum([delta_prob((author1, author2, affil, author1 in global_author_authors and author2 in global_author_authors[author1])) \
+    #         for author1 in global_authors for author2 in global_authors if not author1 == author2]) for affil in global_affils])
+
+   # gradient
+    try:
+        delta_prob = lambda (author1, author2, affil): global_author_authors[author1][author2] * global_beta * ((1.0 if author2 in global_author_affils and affil in global_author_affils[author2] else 0.0) - (1.0 if author1 in global_author_affils and affil in global_author_affils[author1] else 0.0)) \
+                / ( 1.0 + np.exp(global_beta * Delta[global_authoridx[author1]][global_authoridx[author2]]))
+
+        delta_obj = np.array([sum([delta_prob((author1, author2, affil)) \
+                for author1 in global_authors for author2 in global_authors if not author1 == author2 and \
+                author1 in global_author_authors and author2 in global_author_authors[author1]]) for affil in global_affils])
+    except Exception, e:
+        print e
+        import pdb;pdb.set_trace()
 
     return sign * delta_obj
 
 
-def rank_nodes_mle(authors, author_authors, affils, author_affils, beta=1.0):
+def rank_nodes_mle(authors, author_authors, affils, author_affils, beta=.1):
     # delta = get_delta(author_affils, author1, author2, affil_score)
     # p = 1.0/( 1.0 + np.exp(-beta * delta))
     global global_authoridx, global_affilidx, global_beta, global_authors, global_affils, global_author_authors, global_author_affils
@@ -474,23 +501,23 @@ def rank_nodes_mle(authors, author_authors, affils, author_affils, beta=1.0):
     # scores, f, d = optimize.fmin_l_bfgs_b(object_func, np.zeros(len(affil_idx)),\
     #              fprime=fprime, bounds=[(0.0, None) for i in xrange(len(affil_idx))], epsilon=1e-04, disp=1)
 
-    # cons = ({'type': 'eq',
-    #         'fun' : lambda x: np.array([sum(x) - 1.0]), # x1 + ... + xn = 1
-    #         'jac' : lambda x: np.array([1.0 for i in xrange(len(x))])}
-    #         )
-    cons = ()
+    cons = ({'type': 'eq',
+            'fun' : lambda x: np.array([sum(x) - 1.0]), # x1 + ... + xn = 1
+            'jac' : lambda x: np.array([1.0 for i in xrange(len(x))])}
+            )
+    # cons = ()
 
-    # method = 'SLSQP'
-    method = 'L-BFGS-B'
+    method = 'SLSQP'
+    # method = 'L-BFGS-B'
 
     res = optimize.minimize(object_func, np.zeros(len(affil_idx)), args=(-1.0,), \
             jac=fprime, bounds=[(0.0, 1.0) for i in xrange(len(affil_idx))], \
             constraints=cons, method=method, options={
             'disp': True,
-            'factr': 1e7,
+            # 'factr': 1e7,
             'ftol': 1e-09,
-            'maxiter': 50,
-            'gtol': 1e-06
+            'maxiter': 100,
+            # 'gtol': 1e-06
             })
 
     print res
@@ -548,6 +575,44 @@ def rank_nodes_stat(author_graph, author_affils, author_per_paper_dist, author_s
     # affil_scores = calc_affil_scores(pred_authorships, author_affils)
     affil_scores = calc_affil_occurrences(pred_authorships, author_affils)
     return affil_scores
+
+
+def avg_scores(author_graph, author_affils, author_per_paper_dist, author_scores, itr=20):
+    affil_scores_list = []
+    for i in xrange(itr):
+        affil_scores = rank_nodes_stat(author_graph, author_affils, author_per_paper_dist, author_scores)
+        affil_scores_list.append(affil_scores)
+
+    # # 1) total score
+    # avg_affil_scores = defaultdict(float)
+    # for each_scores in affil_scores_list:
+    #     for affil, score in each_scores.iteritems():
+    #         avg_affil_scores[affil] += score
+
+    # # 2) avg score
+    # avg_affil_scores = defaultdict(float)
+    # affil_count = defaultdict(float)
+    # for each_scores in affil_scores_list:
+    #     for affil, score in each_scores.iteritems():
+    #         avg_affil_scores[affil] += score
+    #         affil_count[affil] += 1
+
+    # for k, v in affil_count.iteritems():
+    #     avg_affil_scores[k] /= v
+
+    # 3) trimmed avg score
+    avg_affil_scores = defaultdict(float)
+    tmp_avg_affil_scores = defaultdict(list)
+    for each_scores in affil_scores_list:
+        for affil, score in each_scores.iteritems():
+            tmp_avg_affil_scores[affil].append(score)
+
+    for k, v in tmp_avg_affil_scores.iteritems():
+        tmp = sorted(v, reverse=True)
+        tmp = tmp[:int(.5*len(tmp))]
+        avg_affil_scores[k] = np.mean(tmp)
+
+    return avg_affil_scores
 
 
 def match_authorid_idx(author_graph):
@@ -1395,48 +1460,4 @@ def normalize(x):
   sums = sum(x.values())
   xx = {k:v/sums for k, v in x.iteritems()}
   return xx
-
-
-
-if __name__ == '__main__':
-
-    logging.basicConfig(format='%(asctime)s [%(levelname)s] : %(message)s', level=logging.INFO)
-
-#   test_attenuators()
-#   sys.exit()
-
-#   g = DiGraph()
-#   g.add_edge(0,1,weight=1.0)
-#   g.add_edge(1,2,weight=5.0)
-#   g.add_edge(1,0,weight=5.0)
-#   print adjacency_matrix(stochastic_graph(g))
-
-#   query = "subspace+clustering_N100_H1"
-    query = "subgraph+mining"
-#   query = "data+cleaning_N100_H1"
-#   query = "image+descriptor_N100_H1"
-
-    graph = nx.read_gexf("models/%s.gexf" % query, node_type=int)
-
-#   print "The Dense", len(graph.in_edges(637)), \
-#                                           sum([a["weight"] for u,v,a in graph.in_edges(637, data=True)]), \
-#                                           np.mean([graph.out_degree(u) for u,v in graph.in_edges(637)])
-#
-#   print "GSpan", len(graph.in_edges(296)), \
-#                                   sum([a["weight"] for u,v,a in graph.in_edges(296, data=True)]), \
-#                                   np.mean([graph.out_degree(u) for u,v in graph.in_edges(296)])
-#   sys.exit()
-
-    rank = rank_nodes(graph, 1.0, 1.0, 1.0, 1.0, ctx_relev=0.5, query_relev=0.5, age_relev=0.5,
-                                                limit=15, out_file="graphs/ranks/%s.gexf" % query)
-
-    print
-    for node_id, paper_id, query_score, score, score_layers in rank :
-        print "{%15s,  %4d,  %3d,  %.4f} : [%.2f]   %-70s  |  %s" % (paper_id,
-                                                                                             graph.node[node_id]["year"],
-                                                                                             len(graph.in_edges(node_id)),
-                                                                                             100*query_score,
-                                                                                             100*score,
-                                                                                             utils.get_title(paper_id)[:70],
-                                                                                             ' '.join(map(str,np.round(100*score_layers,3))))
 

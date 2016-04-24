@@ -11,7 +11,7 @@ import numpy as np
 import config
 from collections import defaultdict
 from mymysql.mymysql import MyMySQL
-from ranking.kddcup_searchers import SimpleSearcher, Searcher
+from ranking.kddcup_searchers import SimpleSearcher, Searcher, IterProjectedSearcher
 from evaluation.kddcup_expt import get_results_file, save_results
 
 db = MyMySQL(db=config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
@@ -44,14 +44,14 @@ def rank_affils(selected_affils, conf_name, year, searcher, show=True, results_f
 def merge_confs_in_phase(phase, method_name):
     confs = [
                 [
-                    "SIGIR", # Phase 1
-                    "SIGMOD",
-                    "SIGCOMM"
+                    # "SIGIR", # Phase 1
+                    # "SIGMOD",
+                    # "SIGCOMM"
                 ],
 
                 [
-                    # "KDD", # Phase 2
-                    # "ICML"
+                    "KDD", # Phase 2
+                    "ICML"
                 ],
 
                 [
@@ -94,11 +94,11 @@ def main():
 
     confs = [
                 # "SIGIR", # Phase 1
-                "SIGMOD",
+                # "SIGMOD",
                 # "SIGCOMM",
 
                 # "KDD", # Phase 2
-                # "ICML",
+                "ICML",
 
                 # "FSE", # Phase 3
                 # "MobiCom",
@@ -106,8 +106,9 @@ def main():
             ]
 
     searchers = [
-                    SimpleSearcher(**config.PARAMS),
+                    # SimpleSearcher(**config.PARAMS),
                     # Searcher(**config.PARAMS),
+                    IterProjectedSearcher(**config.PARAMS),
 
                 ]
 
@@ -137,6 +138,17 @@ def main():
                               'author_affils_relev': .6,
                               'alpha': 0.2}) # 0.1
 
+            if s.name() == "IterProjectedLayered":
+                s.set_params(**{
+                          'H': 0,
+                          'age_relev': .0, # .0
+                          # 'papers_relev': .7, # .99
+                          # 'authors_relev': .3, # .01
+                          'author_affils_relev': .95, # .95
+                          'alpha': .4, # .9, .4 (easy_search)
+                          'affil_relev': 1.0
+                          })
+
             rfile = get_results_file(c, "results_%s"%s.name())
             rank_affils(selected_affils, c, year, s, results_file=rfile)
             del s
@@ -145,5 +157,5 @@ def main():
 
 if __name__ == '__main__':
     # main()
-    merge_confs_in_phase(1, "SimpleSearcher")
+    merge_confs_in_phase(2, "IterProjectedLayered")
 

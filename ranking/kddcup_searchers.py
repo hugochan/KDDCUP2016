@@ -6,12 +6,12 @@ Created on Mar 14, 2016
 
 from datasets.mag import get_selected_expand_pubs
 from ranking.kddcup_ranker import rank_nodes, rank_single_layer_nodes, rank_author_affil_nodes, \
-            rank_projected_nodes, rank_paper_author_affil_nodes, rank_nodes_mle, rank_nodes_stat
+            rank_projected_nodes, rank_paper_author_affil_nodes, rank_nodes_mle, rank_nodes_stat, avg_scores
 import kddcup_model
 import utils
 import config
 
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 import os
 import networkx as nx
 import numpy as np
@@ -97,9 +97,9 @@ def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=Fa
     # expand docs set by getting more papers accepted by the targeted conference
     if expand_year:
         conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
-        expand_recrods, _, __ = get_selected_expand_pubs(conf_id, expand_year, _type='expanded')
-        pub_records.update(expand_recrods)
-        print 'expanded %s papers.'%len(expand_recrods)
+        expand_records, _, __ = get_selected_expand_pubs(conf_id, expand_year, _type='expanded')
+        pub_records.update(expand_records)
+        print 'expanded %s papers.'%len(expand_records)
 
     current_year = config.PARAMS['current_year']
     old_year = config.PARAMS['old_year']
@@ -581,10 +581,39 @@ class StatSearcher:
                                         exclude_papers, expanded_year)
 
 
+        # 1)
         # Rank nodes
-        scores = rank_nodes_stat(author_graph, author_affils, author_per_paper_dist, author_scores)
+        # scores = rank_nodes_stat(author_graph, author_affils, author_per_paper_dist, author_scores)
+        scores = avg_scores(author_graph, author_affils, author_per_paper_dist, author_scores)
 
         results = get_selected_nodes(scores, selected_affils)
+
+
+        # # 2)
+        # avg_ranking = defaultdict(float)
+        # tmp_avg_ranking = defaultdict(list)
+        # results_list = []
+
+        # for i in xrange(50):
+        #     # Rank nodes
+        #     scores = rank_nodes_stat(author_graph, author_affils, author_per_paper_dist, author_scores)
+
+        #     result = sorted(scores.iteritems(), key=lambda d:d[1], reverse=True)
+        #     results_list.append(result)
+
+        # for each_rst in results_list:
+        #     # score to ranking
+        #     i = 1
+        #     for k, _ in each_rst:
+        #         tmp_avg_ranking[k].append(i)
+        #         i += 1
+
+        # for k, v in tmp_avg_ranking.iteritems():
+        #     tmp = sorted(v)
+        #     tmp = tmp[:int(.5*len(tmp))+1]
+        #     avg_ranking[k] = np.mean(tmp)
+
+        # results = sorted(avg_ranking.iteritems(), key=lambda d:d[1])
 
 
         return results

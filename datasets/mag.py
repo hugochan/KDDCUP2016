@@ -1086,6 +1086,9 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
                         except Exception, e:
                             print e
                             import pdb;pdb.set_trace()
+                else:
+                    # import pdb;pdb.set_trace()
+                    pass
             # dblp_keys = get_dblp_key_by_authnames(author_name)
             # if dblp_keys:
             #     dblp_key_str = ",".join(["'%s'" % each for each in dblp_keys])
@@ -1255,6 +1258,9 @@ def get_selected_expand_pubs(conf, year, _type="selected"):
         year_str = "%s"%str(year)
 
     elif hasattr(year, '__iter__'): # length of tuple should be larger than 1, otherwise use string
+        if not year:
+            return dict(), set(), set()
+
         year_str = ",".join(["%s" % x for x in year])
 
     else:

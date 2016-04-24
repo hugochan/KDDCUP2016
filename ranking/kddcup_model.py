@@ -1682,12 +1682,12 @@ class ModelBuilder:
     author_scores = {graph.node[nid]['entity_id']: float(score) for nid, score in author_scores.items()}
 
 
-    graph2 = self.assemble_layers(None, None,
-                   authors, None, coauthor_edges, None,
-                   None, None, None)
+    # graph2 = self.assemble_layers(None, None,
+    #                authors, None, coauthor_edges, None,
+    #                None, None, None)
 
-    auth_mapping = {graph2.node[x]['entity_id']:x for x in graph2.nodes()}
-    W = nx.stochastic_graph(graph2, weight='weight') # create a copy in (right) stochastic form
+    # auth_mapping = {graph2.node[x]['entity_id']:x for x in graph2.nodes()}
+    # W = nx.stochastic_graph(graph2, weight='weight') # create a copy in (right) stochastic form
 
     # import pdb;pdb.set_trace()
     # 2) compute affil scores

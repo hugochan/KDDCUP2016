@@ -36,7 +36,6 @@ def calc_ground_truth_score(selected_affils, conf_name, year="2015"): # {paper_i
     Uses latest pub records to estimate ground truth scores.
     """
     ground_truth = simple_search(selected_affils, conf_name, year, age_decay=False)
-
     return ground_truth
 
 
@@ -79,7 +78,8 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     start = time.time()
 
     if searcher.name() == "SimpleSearcher":
-        expand_year = []
+        # expand_year = []
+        expand_year = [2008]
         # expand_year = range(2005, 2011)
         results = searcher.search(selected_affils, conf_name, year, expand_year=expand_year, age_decay=True, rtype="affil")
 
@@ -95,16 +95,16 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
 
     elif searcher.name() == "IterProjectedLayered":
-        expand_year = []
-        # expand_year = range(2005, 2011)
+        # expand_year = []
+        expand_year = range(2008, 2011)
 
-        # results = searcher.easy_search(selected_affils, conf_name, year, exclude_papers, expand_year)
+        results = searcher.easy_search(selected_affils, conf_name, year, exclude_papers, expand_year)
         # results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
-        results = searcher.mle_search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
+        # results = searcher.mle_search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
 
     elif searcher.name() == "StatSearcher":
-        # expand_year = []
-        expand_year = range(2005, 2011)
+        expand_year = []
+        # expand_year = range(2005, 2011)
 
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
 
@@ -116,7 +116,8 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
 
     actual, relevs = zip(*ground_truth)
     pred = zip(*results)[0]
-
+    print pred[:150]
+    # print actual[:100]
     # actual_affils = get_affil_based_on_id(actual)
     # ground_5y = simple_search(selected_affils, conf_name, [2011,2012,2013,2014,2015], age_decay=False)
     # ground_5y_affils = get_affil_based_on_id(zip(*ground_5y)[0])
@@ -162,21 +163,23 @@ def main():
             ]
 
     searchers = [
-                    # SimpleSearcher(**config.PARAMS),
+                    SimpleSearcher(**config.PARAMS),
                     # RegressionSearcher(**config.PARAMS),
                     # Searcher(**config.PARAMS),
                     # ProjectedSearcher(**config.PARAMS),
                     # IterProjectedSearcher(**config.PARAMS),
-                    StatSearcher(**config.PARAMS)
+                    # StatSearcher(**config.PARAMS)
                 ]
 
     # import pdb;pdb.set_trace()
     selected_affils = db.select(fields="id", table="selected_affils")
-    year = ["2011", "2012", "2013", "2014"]
+    year = []
+    # year = ["2011", "2012", "2013", "2014"]
     for c in confs :
         # log.info("Running '%s' conf.\n" % c)
         print "Running on '%s' conf." % c
         ground_truth = calc_ground_truth_score(selected_affils, c) # low coverage
+
         # count = 0
         # for k, v in ground_truth:
         #     if v == 0:
@@ -190,7 +193,7 @@ def main():
 
             if s.name() == "SimpleSearcher":
                 s.set_params(**{
-                              'age_relev': .0, # .5, .7, .08
+                              'age_relev': .0, # .5, .7, .08, .2
                               })
 
             if s.name() == "RegressionSearcher":
@@ -219,11 +222,11 @@ def main():
             if s.name() == "IterProjectedLayered":
                 s.set_params(**{
                           'H': 0,
-                          'age_relev': .0, # .0
+                          'age_relev': .6, # .0
                           # 'papers_relev': .7, # .99
                           # 'authors_relev': .3, # .01
                           'author_affils_relev': .95, # .95
-                          'alpha': .6, # .9 (easy_search)
+                          'alpha': .9, # .9, 0.4 (easy_search)
                           'affil_relev': 1.0
                           })
 
