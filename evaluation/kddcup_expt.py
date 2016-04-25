@@ -79,8 +79,8 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
 
     if searcher.name() == "SimpleSearcher":
         # expand_year = []
-        expand_year = [2008]
-        # expand_year = range(2005, 2011)
+        # expand_year = [2001]
+        expand_year = range(2001, 2011)
         results = searcher.search(selected_affils, conf_name, year, expand_year=expand_year, age_decay=True, rtype="affil")
 
     elif searcher.name() == "RegressionSearcher":
@@ -154,8 +154,8 @@ def main():
                 # "SIGMOD",
                 # "SIGCOMM",
 
-                "KDD", # Phase 2
-                # "ICML",
+                # "KDD", # Phase 2
+                "ICML",
 
                 # "FSE", # Phase 3
                 # "MobiCom",
@@ -173,8 +173,8 @@ def main():
 
     # import pdb;pdb.set_trace()
     selected_affils = db.select(fields="id", table="selected_affils")
-    year = []
-    # year = ["2011", "2012", "2013", "2014"]
+    # year = []
+    year = ["2011", "2012", "2013", "2014"]
     for c in confs :
         # log.info("Running '%s' conf.\n" % c)
         print "Running on '%s' conf." % c
@@ -222,7 +222,7 @@ def main():
             if s.name() == "IterProjectedLayered":
                 s.set_params(**{
                           'H': 0,
-                          'age_relev': .6, # .0
+                          'age_relev': .0, # .0
                           # 'papers_relev': .7, # .99
                           # 'authors_relev': .3, # .01
                           'author_affils_relev': .95, # .95
