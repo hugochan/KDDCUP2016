@@ -15,7 +15,8 @@ import cPickle
 from evaluation.metrics import ndcg2
 from datasets.mag import get_selected_docs
 from ranking.kddcup_searchers import simple_search, SimpleSearcher, RegressionSearcher, \
-                    Searcher, ProjectedSearcher, IterProjectedSearcher, StatSearcher
+                    Searcher, ProjectedSearcher, IterProjectedSearcher, StatSearcher, \
+                    TemporalSearcher
 
 
 # log.basicConfig(format='%(asctime)s [%(levelname)s] : %(message)s', level=log.INFO)
@@ -154,8 +155,8 @@ def main():
                 # "SIGMOD",
                 # "SIGCOMM",
 
-                # "KDD", # Phase 2
-                "ICML",
+                "KDD", # Phase 2
+                # "ICML",
 
                 # "FSE", # Phase 3
                 # "MobiCom",
@@ -163,15 +164,15 @@ def main():
             ]
 
     searchers = [
-                    SimpleSearcher(**config.PARAMS),
+                    # SimpleSearcher(**config.PARAMS),
                     # RegressionSearcher(**config.PARAMS),
                     # Searcher(**config.PARAMS),
                     # ProjectedSearcher(**config.PARAMS),
                     # IterProjectedSearcher(**config.PARAMS),
-                    # StatSearcher(**config.PARAMS)
+                    # StatSearcher(**config.PARAMS),
+                    TemporalSearcher(**config.PARAMS)
                 ]
 
-    # import pdb;pdb.set_trace()
     selected_affils = db.select(fields="id", table="selected_affils")
     # year = []
     year = ["2011", "2012", "2013", "2014"]

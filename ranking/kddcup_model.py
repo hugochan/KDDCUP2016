@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 from mymysql import MyMySQL
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from exceptions import TypeError
 
 # from pylucene import Index
@@ -21,6 +21,10 @@ import config
 import utils
 from datasets.mag import get_selected_docs, get_selected_expand_pubs, get_conf_docs, retrieve_affils_by_authors
 from ranking.kddcup_ranker import rank_single_layer_nodes
+import json
+
+
+old_settings = np.seterr(all='warn', over='raise')
 
 
 # Database connection
@@ -1914,6 +1918,158 @@ class ModelBuilder:
     author_scores = normalize(author_npubs)
 
     return author_graph, author_affils, author_per_paper_dist, author_scores
+
+
+
+
+  def simple_author_rating(self, conf_name, year, expand_year=[]):
+    """
+    rating authors based on publications
+    """
+    author_scores = defaultdict(float)
+    pub_records, _, __ = get_selected_expand_pubs(conf_name, year, _type='selected')
+
+    # expand docs set by getting more papers accepted by the targeted conference
+    if expand_year:
+      conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
+      expand_records, _, __ = get_selected_expand_pubs(conf_id, expand_year, _type='expanded')
+      pub_records.update(expand_records)
+      print 'expanded %s papers.'%len(expand_records)
+
+    for _, record in pub_records.iteritems():
+      score = 1.0
+      # score = 1.0 / len(record['author'])
+      for author_id, _ in record['author'].iteritems():
+        author_scores[author_id] += score
+
+    author_scores = OrderedDict(sorted(author_scores.iteritems(), key=lambda d:d[1], reverse=True))
+
+    return author_scores
+
+
+  def get_year_author_rating(self, conf_name, force=False):
+
+    if force:
+      year_author_rating = defaultdict()
+      for year in range(2001, 2011):
+        year_author_rating[str(year)] = self.simple_author_rating(conf_name, year=[], expand_year=str(year))
+
+      for year in range(2011, 2016):
+        year_author_rating[str(year)] = self.simple_author_rating(conf_name, str(year))
+
+
+      # save it
+      with open('year_author_rating.json', 'w') as fp:
+        json.dump(year_author_rating, fp)
+        fp.close()
+
+    else:
+      with open('year_author_rating.json', 'r') as fp:
+        year_author_rating = json.load(fp)
+        fp.close()
+
+
+    # check stableness of each year's top authors
+    print "stableness of each year's top authors:"
+    for year in range(2001, 2015):
+      cur_year_toplist = year_author_rating[str(year)].keys()
+      next_year_toplist = year_author_rating[str(year+1)].keys()
+      comm_authors = set(cur_year_toplist) & set(next_year_toplist)
+      print "%s-%s # of comm authors: %s" % (year, year+1, len(comm_authors))
+
+
+    # generate a watching list of active authors based on past 5 years' records
+    watching_list = set()
+    for year in range(2010, 2015):
+      watching_list.update(year_author_rating[str(year)].keys())
+
+    return year_author_rating, watching_list
+
+
+  def review_author_trends(self, year_author_rating, watching_list, plot=False):
+    author_year_trends = defaultdict()
+    for author in watching_list:
+      author_year_trends[author] = {}
+      for year, author_score in year_author_rating.iteritems():
+        author_year_trends[author][year] = author_score[author] \
+                                if author in author_score else .0
+
+    # sort it
+    author_year_trends = OrderedDict(sorted(author_year_trends.iteritems(), key=lambda d:sum(d[1].values()), reverse=True))
+
+    # plot it
+    if plot:
+      for author, trends in author_year_trends.items()[:20]:
+        plt.figure()
+        plt.title('KDD - %s'%author)
+        x, y = zip(*(sorted(trends.iteritems(), key=lambda d:d[0])))
+        plt.plot(x, y, 'o--', label='publishing trends')
+        plt.savefig('img/author_trends/KDD-%s.png'%author)
+        plt.show()
+
+    return author_year_trends
+
+
+  def pred_author_trends_variance(self, author_year_trends, end_year='2014'):
+    """
+    predicate authors' trends and variance based on historical records.
+    """
+    # import pdb;pdb.set_trace()
+
+    count_correct = 0
+    pred_author_trends = defaultdict()
+    for author, trends in author_year_trends.items():
+      filtered_trends = {year:score for year, score in trends.iteritems() if year <= end_year}
+
+      years, scores = zip(*(sorted(filtered_trends.iteritems(), key=lambda d:d[0])))
+
+      # find the first one which is larger than 0
+      start_idx = (np.array(scores) > 0).tolist().index(True)
+      start_idx = start_idx - 1 if start_idx > 0 else start_idx # works better in practice
+      scores = scores[start_idx:]
+
+      # if np.sum(scores[-5:]) < 2:
+      #   continue
+
+      # variance or fluctuation
+      # sigma = np.var(scores)
+
+      sigma = np.mean([abs(scores[i] - scores[i + 1]) for i in range(len(scores) - 1)]) if len(scores) > 1 else .0
+
+      # trend, 1 stands for going up, -1 stands for going down, 0 stands for keeping stable
+      # 1)
+      # count how many times of up, down and stable
+      # bad idea, trend is much likely to be 0 in the long run
+
+      # count_up = np.sum([scores[i] < scores[i + 1] for i in range(len(scores) - 1)])
+      # count_down = np.sum([scores[i] > scores[i + 1] for i in range(len(scores) - 1)])
+      # count_stable = np.sum([scores[i] == scores[i + 1] for i in range(len(scores) - 1)])
+      # count = float(count_up + count_down + count_stable)
+      # trend = 1.0 * (count_up/count) - 1.0 * (count_down/count) + .0 * (count_stable/count)
+
+      # 2)
+      # if current point is above the mean point, goes down, if below, goes up, otherwise, keeps stable
+      # works well in practice!
+
+      if scores[-1] < np.mean(scores):
+        trend = 1.0
+      elif scores[-1] > np.mean(scores):
+        trend = -1.0
+      else:
+        trend = .0
+
+      if trend > 0 and scores[-1] < author_year_trends[author][str(int(end_year)+1)]:
+        count_correct += 1
+      elif trend < 0 and scores[-1] > author_year_trends[author][str(int(end_year)+1)]:
+        count_correct += 1
+      elif trend == 0 and scores[-1] == author_year_trends[author][str(int(end_year)+1)]:
+        count_correct += 1
+
+      pred_author_trends[author] = trend * sigma
+
+    print "correct trend pred ratio: %s/%s" % (count_correct, len(pred_author_trends))
+
+    return pred_author_trends
 
 
 def normalize(x):

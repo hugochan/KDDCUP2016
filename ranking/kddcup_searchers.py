@@ -620,6 +620,38 @@ class StatSearcher:
 
 
 
+class TemporalSearcher:
+    """
+    Basic searcher class for the a Temporal method.
+    """
+
+    def __init__(self, **params):
+        self.params = params
+        self.save = True
+
+    def name(self):
+        return "TemporalSearcher"
+
+    def set_save(self, save):
+        self.save = save
+
+    def set_params(self, **params):
+        for k, v in params.items():
+            self.params[k] = v
+
+    def set_param(self, name, value):
+        self.params[name] = value
+
+
+    def search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], rtype="affil", force=False):
+        builder = kddcup_model.ModelBuilder()
+        year_author_rating, watching_list = builder.get_year_author_rating(conf_name)
+        author_year_trends = builder.review_author_trends(year_author_rating, watching_list)
+        pred_author_trends = builder.pred_author_trends_variance(author_year_trends)
+        return []
+
+
+
 def get_top_nodes(graph, scores, limit, return_type="affil"):
     """
     Helper method that takes the graph and the calculated scores and outputs a sorted rank
