@@ -110,6 +110,12 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
 
 
+    elif searcher.name() == "TemporalSearcher":
+        expand_year = []
+        # expand_year = range(2005, 2011)
+
+        results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
+
     else:
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
 
@@ -235,6 +241,13 @@ def main():
                 s.set_params(**{
                           'H': 0,
                           'age_relev': .0, # .0
+                          })
+
+            if s.name() == "TemporalSearcher":
+                s.set_params(**{
+                          'H': 0,
+                          'age_relev': .0, # .0
+                          'alpha': .9, # .9, 0.4 (easy_search)
                           })
 
             rfile = get_results_file(c, s.name())

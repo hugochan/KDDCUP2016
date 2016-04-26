@@ -645,10 +645,17 @@ class TemporalSearcher:
 
     def search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], rtype="affil", force=False):
         builder = kddcup_model.ModelBuilder()
-        year_author_rating, watching_list = builder.get_year_author_rating(conf_name)
+        year_author_rating, watching_list, _ = builder.get_year_author_rating(conf_name, force=False)
         author_year_trends = builder.review_author_trends(year_author_rating, watching_list)
-        pred_author_trends = builder.pred_author_trends_variance(author_year_trends)
-        return []
+
+        pred_author_trends = builder.pred_author_trends(author_year_trends)
+        author_scores, author_affils = builder.rate_projected_authors(conf_name, year, self.params['age_relev'], self.params['H'], self.params['alpha'], exclude=exclude_papers, expanded_year=expanded_year)
+        author_scores = builder.calc_temporal_author_scores(author_scores, pred_author_trends)
+
+        affil_scores = builder.rate_affil_by_author(author_scores, author_affils)
+        results = get_selected_nodes(affil_scores, selected_affils)
+
+        return results
 
 
 

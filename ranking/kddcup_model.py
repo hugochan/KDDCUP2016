@@ -1927,6 +1927,7 @@ class ModelBuilder:
     rating authors based on publications
     """
     author_scores = defaultdict(float)
+    author_affils = defaultdict(set)
     pub_records, _, __ = get_selected_expand_pubs(conf_name, year, _type='selected')
 
     # expand docs set by getting more papers accepted by the targeted conference
@@ -1939,35 +1940,50 @@ class ModelBuilder:
     for _, record in pub_records.iteritems():
       score = 1.0
       # score = 1.0 / len(record['author'])
-      for author_id, _ in record['author'].iteritems():
+      for author_id, affil_ids in record['author'].iteritems():
         author_scores[author_id] += score
+        author_affils[author_id].update(affil_ids)
 
     author_scores = OrderedDict(sorted(author_scores.iteritems(), key=lambda d:d[1], reverse=True))
 
-    return author_scores
+    return author_scores, author_affils
 
 
   def get_year_author_rating(self, conf_name, force=False):
-
     if force:
+      author_affils = defaultdict()
       year_author_rating = defaultdict()
       for year in range(2001, 2011):
-        year_author_rating[str(year)] = self.simple_author_rating(conf_name, year=[], expand_year=str(year))
+        author_scores, tmp_author_affils = self.simple_author_rating(conf_name, year=[], expand_year=str(year))
+        year_author_rating[str(year)] = author_scores
+        author_affils.update(tmp_author_affils)
 
       for year in range(2011, 2016):
-        year_author_rating[str(year)] = self.simple_author_rating(conf_name, str(year))
-
+        author_scores, tmp_author_affils = self.simple_author_rating(conf_name, str(year))
+        year_author_rating[str(year)] = author_scores
+        author_affils.update(tmp_author_affils)
 
       # save it
-      with open('year_author_rating.json', 'w') as fp:
+      with open('%s_year_author_rating.json'%conf_name, 'w') as fp:
         json.dump(year_author_rating, fp)
         fp.close()
 
+      with open('%s_author_affils.json'%conf_name, 'w') as fp:
+        author_affils = {x:list(y) for x, y in author_affils.items()}
+        json.dump(author_affils, fp)
+        fp.close()
+
+
     else:
-      with open('year_author_rating.json', 'r') as fp:
+      with open('%s_year_author_rating.json'%conf_name, 'r') as fp:
         year_author_rating = json.load(fp)
         fp.close()
 
+      # with open('%s_author_affils.json'%conf_name, 'r') as fp:
+      #   import pdb;pdb.set_trace()
+      #   author_affils = json.load(fp)
+      #   fp.close()
+      author_affils = {}
 
     # check stableness of each year's top authors
     print "stableness of each year's top authors:"
@@ -1983,7 +1999,7 @@ class ModelBuilder:
     for year in range(2010, 2015):
       watching_list.update(year_author_rating[str(year)].keys())
 
-    return year_author_rating, watching_list
+    return year_author_rating, watching_list, author_affils
 
 
   def review_author_trends(self, year_author_rating, watching_list, plot=False):
@@ -2010,7 +2026,7 @@ class ModelBuilder:
     return author_year_trends
 
 
-  def pred_author_trends_variance(self, author_year_trends, end_year='2014'):
+  def pred_author_trends(self, author_year_trends, end_year='2014'):
     """
     predicate authors' trends and variance based on historical records.
     """
@@ -2070,6 +2086,62 @@ class ModelBuilder:
     print "correct trend pred ratio: %s/%s" % (count_correct, len(pred_author_trends))
 
     return pred_author_trends
+
+
+  def calc_temporal_author_scores(self, author_scores, pred_author_trends, scalar=.01):
+    scalar = (max(author_scores.values()) - min(author_scores.values())) * .01
+    temporal_author_scores = defaultdict()
+    for author, trend in pred_author_trends.iteritems():
+      if not author in author_scores:
+        continue
+
+      temporal_author_scores[author] = author_scores[author] + scalar * trend
+
+    return temporal_author_scores
+
+
+  def rate_affil_by_author(self, author_scores, author_affils):
+    affil_scores = defaultdict(float)
+
+    for author, score in author_scores.iteritems():
+      if not author in author_affils:
+        continue
+
+      for each_affil in author_affils[author]:
+        affil_scores[each_affil] += score
+
+    return affil_scores
+
+
+  def rate_projected_authors(self, conf_name, year, age_relev, n_hops, alpha, exclude=[], expanded_year=[]):
+    # 1) page layer -> author layer
+    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude, expanded_year)
+
+    # 1) run pagerank on author citation layer
+    graph = self.assemble_layers(None, None,
+                   authors, author_author_edges, None, None,
+                   None, None, None)
+
+    cite_author_scores = rank_single_layer_nodes(graph, alpha=alpha)
+
+    author_scores = cite_author_scores
+
+    # # 2) run pagerank on author coauthorship layer
+    # graph = self.assemble_layers(None, None,
+    #                authors, None, coauthor_edges, None,
+    #                None, None, None)
+
+    # coauth_author_scores = rank_single_layer_nodes(graph, alpha=alpha)
+
+    # beta = 1.0
+
+    # vals = (beta * np.array(cite_author_scores.values()) + \
+    #       (1 - beta) * np.array(coauth_author_scores.values())).tolist()
+    # author_scores = dict(zip(cite_author_scores.keys(), vals))
+
+    author_scores = {graph.node[nid]['entity_id']: float(score) for nid, score in author_scores.items()}
+
+    return author_scores, author_affils
 
 
 def normalize(x):
