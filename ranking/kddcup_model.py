@@ -1993,6 +1993,10 @@ class ModelBuilder:
       comm_authors = set(cur_year_toplist) & set(next_year_toplist)
       print "%s-%s # of comm authors: %s" % (year, year+1, len(comm_authors))
 
+    print "# of authors each year:"
+    for year in range(2001, 2015):
+      print "%s # of authors: %s" % (year, len(year_author_rating[str(year)].keys()))
+
 
     # generate a watching list of active authors based on past 5 years' records
     watching_list = set()
@@ -2034,62 +2038,93 @@ class ModelBuilder:
 
     count_correct = 0
     pred_author_trends = defaultdict()
-    for author, trends in author_year_trends.items():
-      filtered_trends = {year:score for year, score in trends.iteritems() if year <= end_year}
+    try:
+      for author, trends in author_year_trends.items():
+        filtered_trends = {year:score for year, score in trends.iteritems() if year <= end_year}
 
-      years, scores = zip(*(sorted(filtered_trends.iteritems(), key=lambda d:d[0])))
+        years, scores = zip(*(sorted(filtered_trends.iteritems(), key=lambda d:d[0])))
 
-      # find the first one which is larger than 0
-      start_idx = (np.array(scores) > 0).tolist().index(True)
-      start_idx = start_idx - 1 if start_idx > 0 else start_idx # works better in practice
-      scores = scores[start_idx:]
+        # find the first one which is larger than 0
+        try:
+          start_idx = (np.array(scores) > 0).tolist().index(True)
+        except:
+          continue
 
-      # if np.sum(scores[-5:]) < 2:
-      #   continue
+        start_idx = start_idx - 1 if start_idx > 0 else start_idx # works better in practice
+        scores = scores[start_idx:]
 
-      # variance or fluctuation
-      # sigma = np.var(scores)
+        # if np.sum(scores[-5:]) < 2:
+        #   continue
 
-      sigma = np.mean([abs(scores[i] - scores[i + 1]) for i in range(len(scores) - 1)]) if len(scores) > 1 else .0
+        # variance or fluctuation
+        sigma = np.var(scores)
 
-      # trend, 1 stands for going up, -1 stands for going down, 0 stands for keeping stable
-      # 1)
-      # count how many times of up, down and stable
-      # bad idea, trend is much likely to be 0 in the long run
+        # sigma = np.mean([abs(scores[i] - scores[i + 1]) for i in range(len(scores) - 1)]) if len(scores) > 1 else .0
 
-      # count_up = np.sum([scores[i] < scores[i + 1] for i in range(len(scores) - 1)])
-      # count_down = np.sum([scores[i] > scores[i + 1] for i in range(len(scores) - 1)])
-      # count_stable = np.sum([scores[i] == scores[i + 1] for i in range(len(scores) - 1)])
-      # count = float(count_up + count_down + count_stable)
-      # trend = 1.0 * (count_up/count) - 1.0 * (count_down/count) + .0 * (count_stable/count)
+        # trend, 1 stands for going up, -1 stands for going down, 0 stands for keeping stable
+        # 1)
+        # count how many times of up, down and stable
+        # bad idea, trend is much likely to be 0 in the long run
 
-      # 2)
-      # if current point is above the mean point, goes down, if below, goes up, otherwise, keeps stable
-      # works well in practice!
+        # count_up = np.sum([scores[i] < scores[i + 1] for i in range(len(scores) - 1)])
+        # count_down = np.sum([scores[i] > scores[i + 1] for i in range(len(scores) - 1)])
+        # count_stable = np.sum([scores[i] == scores[i + 1] for i in range(len(scores) - 1)])
+        # count = float(count_up + count_down + count_stable)
+        # trend = 1.0 * (count_up/count) - 1.0 * (count_down/count) + .0 * (count_stable/count)
 
-      if scores[-1] < np.mean(scores):
-        trend = 1.0
-      elif scores[-1] > np.mean(scores):
-        trend = -1.0
-      else:
-        trend = .0
+        # 2)
+        # if current point is above the mean point, goes down, if below, goes up, otherwise, keeps stable
+        # works well in practice!
 
-      if trend > 0 and scores[-1] < author_year_trends[author][str(int(end_year)+1)]:
-        count_correct += 1
-      elif trend < 0 and scores[-1] > author_year_trends[author][str(int(end_year)+1)]:
-        count_correct += 1
-      elif trend == 0 and scores[-1] == author_year_trends[author][str(int(end_year)+1)]:
-        count_correct += 1
+        if abs(scores[-1] - np.mean(scores)) <= sigma:
+        # if abs((scores[-1] - np.mean(scores)) / np.mean(scores)) <= .4:
+          trend = .0
+        elif scores[-1] < np.mean(scores):
+          # trend = 1.0
+          # trend = max((np.mean(scores) - scores[-1]) / np.mean(scores), 1.0)
+          trend = min(abs(scores[-1] - np.mean(scores)) / sigma, 1.0)
+          # trend = abs(scores[-1] - np.mean(scores)) / sigma
+        elif scores[-1] > np.mean(scores):
+          # trend = -1.0
+          # trend = max((np.mean(scores) - scores[-1]) / np.mean(scores), -1.0)
+          trend = -min(abs(scores[-1] - np.mean(scores)) / sigma, 1.0)
+          # trend = -abs(scores[-1] - np.mean(scores)) / sigma
+        else:
+          trend = .0
 
-      pred_author_trends[author] = trend * sigma
+
+
+        if trend > 0 and scores[-1] < author_year_trends[author][str(int(end_year)+1)]:
+          count_correct += 1
+        elif trend < 0 and scores[-1] > author_year_trends[author][str(int(end_year)+1)]:
+          count_correct += 1
+        elif trend == 0 and scores[-1] == author_year_trends[author][str(int(end_year)+1)]:
+          count_correct += 1
+        else:
+          # import pdb;pdb.set_trace()
+          pass
+
+        pred_author_trends[author] = trend * sigma
+    except Exception,e:
+      print e
+      import pdb;pdb.set_trace()
 
     print "correct trend pred ratio: %s/%s" % (count_correct, len(pred_author_trends))
 
     return pred_author_trends
 
 
-  def calc_temporal_author_scores(self, author_scores, pred_author_trends, scalar=.01):
-    scalar = (max(author_scores.values()) - min(author_scores.values())) * .01
+
+
+  def calc_temporal_author_scores(self, author_scores, pred_author_trends, scalar=1.0):
+    print "# of comm authors: %s" % len(set(author_scores.keys()) & set(pred_author_trends.keys()))
+
+    scalar = 0
+
+    # normalize
+    author_scores = range_normalize(author_scores)
+    pred_author_trends = range_normalize(pred_author_trends)
+
     temporal_author_scores = defaultdict()
     for author, trend in pred_author_trends.iteritems():
       if not author in author_scores:
@@ -2097,7 +2132,11 @@ class ModelBuilder:
 
       temporal_author_scores[author] = author_scores[author] + scalar * trend
 
+    temporal_author_scores = OrderedDict(sorted(temporal_author_scores.iteritems(), key=lambda d:d[1], reverse=True))
+
     return temporal_author_scores
+
+
 
 
   def rate_affil_by_author(self, author_scores, author_affils):
@@ -2111,6 +2150,25 @@ class ModelBuilder:
         affil_scores[each_affil] += score
 
     return affil_scores
+
+
+  def rate_author_on_history(self, year, year_author_rating):
+    author_scores = defaultdict(float)
+    for yr, records in year_author_rating.iteritems():
+      if not yr in year:
+        continue
+
+      for author, score in records.iteritems():
+        author_scores[author] += score
+
+    # for author, records in author_year_trends.iteritems():
+    #   author_scores[author] = sum([score for yr, score in records.iteritems() if int(yr) in year])
+
+    for author, score in author_scores.iteritems():
+      author_scores[author] = score / float(len(year))
+
+    return author_scores
+
 
 
   def rate_projected_authors(self, conf_name, year, age_relev, n_hops, alpha, exclude=[], expanded_year=[]):
@@ -2147,6 +2205,14 @@ class ModelBuilder:
 def normalize(x):
   sums = sum(x.values())
   xx = {k:v/sums for k, v in x.iteritems()}
+  return xx
+
+def range_normalize(x):
+  _range = max(x.values()) - min(x.values())
+
+  vals = ((np.array(x.values()) - min(x.values())) / _range).tolist()
+  xx = dict(zip(x.keys(), vals))
+
   return xx
 
 def ezplot(x, y, **kwargs):

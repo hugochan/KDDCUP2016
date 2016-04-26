@@ -123,7 +123,7 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
 
     actual, relevs = zip(*ground_truth)
     pred = zip(*results)[0]
-    print pred[:150]
+    # print pred[:150]
     # print actual[:100]
     # actual_affils = get_affil_based_on_id(actual)
     # ground_5y = simple_search(selected_affils, conf_name, [2011,2012,2013,2014,2015], age_decay=False)

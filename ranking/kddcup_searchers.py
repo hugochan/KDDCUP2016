@@ -645,13 +645,29 @@ class TemporalSearcher:
 
     def search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], rtype="affil", force=False):
         builder = kddcup_model.ModelBuilder()
-        year_author_rating, watching_list, _ = builder.get_year_author_rating(conf_name, force=False)
+        year_author_rating, watching_list, author_affils = builder.get_year_author_rating(conf_name, force=False)
+
+        author_scores, author_affils = builder.rate_projected_authors(conf_name, year, self.params['age_relev'], self.params['H'], self.params['alpha'], exclude=exclude_papers, expanded_year=expanded_year)
+        # author_scores = kddcup_model.range_normalize(author_scores)
+
+
+        # author_scores = builder.rate_author_on_history(year, year_author_rating)
+
+
+        author_scores = OrderedDict(sorted(author_scores.iteritems(), key=lambda d:d[1], reverse=True))
+        n_top = None
+
+
+        # generating authors' watching list
+        watching_list = author_scores.keys()[:n_top]
+
         author_year_trends = builder.review_author_trends(year_author_rating, watching_list)
 
         pred_author_trends = builder.pred_author_trends(author_year_trends)
-        author_scores, author_affils = builder.rate_projected_authors(conf_name, year, self.params['age_relev'], self.params['H'], self.params['alpha'], exclude=exclude_papers, expanded_year=expanded_year)
         author_scores = builder.calc_temporal_author_scores(author_scores, pred_author_trends)
 
+        n_author = None
+        author_scores = OrderedDict(author_scores.items()[:n_author])
         affil_scores = builder.rate_affil_by_author(author_scores, author_affils)
         results = get_selected_nodes(affil_scores, selected_affils)
 

@@ -15,6 +15,8 @@ from statsmodels.tsa.stattools import acf, pacf
 from statsmodels.tsa.seasonal import seasonal_decompose
 from statsmodels.tsa.arima_model import ARIMA
 
+old_settings = np.seterr(all='warn', over='raise')
+
 
 def test_stationarity(timeseries):
 
@@ -81,171 +83,190 @@ watching_affil = (u'0966B229', u'05C86094', u'01A8C383', u'00FF56A8', u'4FF45383
     # print len(set(ranks[i][:80]) & set(ranks[i+1][:20]))
 # print len(set(rank_2010[:100]) & set(rank_2011[:20]))
 
+
+with open('affil_scores_trends.json', 'r') as fp:
+    affil_scores_trends = json.load(fp)
+    fp.close()
+
 db = MyMySQL(db=config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
 
 selected_affils = db.select(fields="id", table="selected_affils")
 
 def tsa_pred():
-    affil_scores_trends = OrderedDict()
+    try:
 
-    with open('affil_scores_trends.json', 'r') as fp:
-        affil_scores_trends = json.load(fp)
-        fp.close()
+        affil_scores_trends = OrderedDict()
 
-    # for year in range(2011, 2016):
-    #     results = simple_search(selected_affils, 'KDD', [year], expand_year=[], age_decay=False, age_relev=0.0)
-    #     results = dict(results)
+        with open('affil_scores_trends.json', 'r') as fp:
+            affil_scores_trends = json.load(fp)
+            fp.close()
+        # for year in range(2011, 2016):
+        #     results = simple_search(selected_affils, 'KDD', [year], expand_year=[], age_decay=False, age_relev=0.0)
+        #     results = dict(results)
 
-    #     for affil in watching_affil:
-    #         try:
-    #             affil_scores_trends[affil][year] = results[affil]
-    #         except:
-    #             affil_scores_trends[affil] = {year: results[affil]}
+        #     for affil in watching_affil:
+        #         try:
+        #             affil_scores_trends[affil][year] = results[affil]
+        #         except:
+        #             affil_scores_trends[affil] = {year: results[affil]}
 
-    # for year in range(2001, 2011):
-    #     results = simple_search(selected_affils, 'KDD', [], expand_year=[year], age_decay=False, age_relev=0.0)
-    #     results = dict(results)
+        # for year in range(2001, 2011):
+        #     results = simple_search(selected_affils, 'KDD', [], expand_year=[year], age_decay=False, age_relev=0.0)
+        #     results = dict(results)
 
-    #     for affil in watching_affil:
-    #         try:
-    #             affil_scores_trends[affil][year] = results[affil]
-    #         except:
-    #             affil_scores_trends[affil] = {year: results[affil]}
-
-
-    # with open('affil_scores_trends.json', 'w') as fp:
-    #     json.dump(affil_scores_trends, fp)
-    #     fp.close()
-
-    # import pdb;pdb.set_trace()
-
-    pred_affil_score = defaultdict()
-    dateindex = pd.DatetimeIndex(freq='12m', start='2001', periods=14)
-    for affil in watching_affil[:80]:
-        record = affil_scores_trends[affil]
-        record = sorted(record.items(), key=lambda d:d[0])[:14]
-        x = [int(year) for year in zip(*record)[0]]
-        y = zip(*record)[1]
-        # plt.figure()
-        # plt.title('KDD - %s'%affil)
-        # plt.plot(x, y, 'o--', label='Original')
-
-        # # interploat
-        # spl = interpolate.UnivariateSpline(x[:-1], y[:-1])
-        # # spl = interpolate.InterpolatedUnivariateSpline(x[:-1], y[:-1])
-        # xs = np.linspace(x[0], x[-1], 100)
-        # plt.plot(xs, spl(xs), 'g', lw=3)
-
-        df = pd.DataFrame(np.array(y), index=dateindex, columns=['score'])
-        # rolmean = pd.rolling_mean(df, window=2)
-        # plt.plot(np.array(x), rolmean, color='red', label='Rolling mean')
-        # rol_avg_diff = (np.array(y[1:]) - np.array(rolmean.dropna()).reshape((len(x)-1,)))
-
-        # plt.plot(np.array(x[1:]), rol_avg_diff, color='blue', label='Rolling avg diff')
-        # decomposition = seasonal_decompose(df)
-        # trend = decomposition.trend
-        # seasonal = decomposition.seasonal
-        # residual = decomposition.resid
-
-        # plt.subplot(411)
-        # plt.plot(df, label='Original')
-        # plt.legend(loc='best')
-        # plt.subplot(412)
-        # plt.plot(trend, label='Trend')
-        # plt.legend(loc='best')
-        # plt.subplot(413)
-        # plt.plot(seasonal,label='Seasonality')
-        # plt.legend(loc='best')
-        # plt.subplot(414)
-        # plt.plot(residual, label='Residuals')
-        # plt.legend(loc='best')
-        # plt.tight_layout()
-        # # test_stationarity(df)
-        # plt.savefig('img/TSA/decomp/KDD-%s.png'%affil)
+        #     for affil in watching_affil:
+        #         try:
+        #             affil_scores_trends[affil][year] = results[affil]
+        #         except:
+        #             affil_scores_trends[affil] = {year: results[affil]}
 
 
-        # #ACF and PACF plots:
-        # lag_acf = acf(df, nlags=3)
-        # lag_pacf = pacf(df, nlags=3, method='ols')
+        # with open('affil_scores_trends.json', 'w') as fp:
+        #     json.dump(affil_scores_trends, fp)
+        #     fp.close()
 
-        # #Plot ACF:
-        # plt.subplot(121)
-        # plt.plot(lag_acf)
-        # plt.axhline(y=0,linestyle='--',color='gray')
-        # plt.axhline(y=-1.96/np.sqrt(len(df)),linestyle='--',color='gray')
-        # plt.axhline(y=1.96/np.sqrt(len(df)),linestyle='--',color='gray')
-        # plt.title('Autocorrelation Function')
+        # import pdb;pdb.set_trace()
 
-        # #Plot PACF:
-        # plt.subplot(122)
-        # plt.plot(lag_pacf)
-        # plt.axhline(y=0,linestyle='--',color='gray')
-        # plt.axhline(y=-1.96/np.sqrt(len(df)),linestyle='--',color='gray')
-        # plt.axhline(y=1.96/np.sqrt(len(df)),linestyle='--',color='gray')
-        # plt.title('Partial Autocorrelation Function')
-        # plt.tight_layout()
+        pred_affil_score = defaultdict()
+        dateindex = pd.DatetimeIndex(freq='12m', start='2001', periods=14)
+        for affil in watching_affil[:50]:
+            record = affil_scores_trends[affil]
+            record = sorted(record.items(), key=lambda d:d[0])[:14]
+            x = [int(year) for year in zip(*record)[0]]
+            y = zip(*record)[1]
+            plt.figure()
+            plt.title('KDD - %s'%affil)
+            # plt.plot(x, y, 'o--', label='Original')
 
-        # # AR model
-        # plt.subplot(311)
-        # model = ARIMA(df, order=(1, 1, 0))
-        # results_AR = model.fit(disp=-1)
-        # plt.plot(df, label='Original')
-        # plt.plot(results_AR.fittedvalues, color='red', label='AR model')
-        # plt.title('RSS: %.4f'% np.sum((results_AR.fittedvalues-df[1:])**2)['score'])
-        # plt.legend(loc='best')
+            # # interploat
+            # spl = interpolate.UnivariateSpline(x[:-1], y[:-1])
+            # # spl = interpolate.InterpolatedUnivariateSpline(x[:-1], y[:-1])
+            # xs = np.linspace(x[0], x[-1], 100)
+            # plt.plot(xs, spl(xs), 'g', lw=3)
 
-        # # MA model
-        # plt.subplot(312)
-        # model = ARIMA(df, order=(1, 1, 0))
-        # results_MA = model.fit(disp=-1)
-        # plt.plot(df, label='Original')
-        # plt.plot(results_MA.fittedvalues, color='red', label='MA model')
-        # plt.title('RSS: %.4f'% np.sum((results_MA.fittedvalues-df[1:])**2)['score'])
-        # plt.legend(loc='best')
+            df_origin = pd.DataFrame(np.array(y), index=dateindex, columns=['score'])
 
-        # combined model
-        # plt.subplot(313)
-        try:
-            model = ARIMA(df, order=(1, 1, 0))
-            results_ARIMA = model.fit(disp=-1)
-        except Exception, e:
-            print e
+            # df = np.log(df_origin)
+            # df = df - df.shift()
+            # df.dropna(inplace=True)
+
+            df = df_origin
+            # rolmean = pd.rolling_mean(df, window=2)
+            # plt.plot(np.array(x), rolmean, color='red', label='Rolling mean')
+            # rol_avg_diff = (np.array(y[1:]) - np.array(rolmean.dropna()).reshape((len(x)-1,)))
+
+            # plt.plot(np.array(x[1:]), rol_avg_diff, color='blue', label='Rolling avg diff')
+            # decomposition = seasonal_decompose(df)
+            # trend = decomposition.trend
+            # seasonal = decomposition.seasonal
+            # residual = decomposition.resid
+
+            # plt.subplot(411)
+            # plt.plot(df, label='Original')
+            # plt.legend(loc='best')
+            # plt.subplot(412)
+            # plt.plot(trend, label='Trend')
+            # plt.legend(loc='best')
+            # plt.subplot(413)
+            # plt.plot(seasonal,label='Seasonality')
+            # plt.legend(loc='best')
+            # plt.subplot(414)
+            # plt.plot(residual, label='Residuals')
+            # plt.legend(loc='best')
+            # plt.tight_layout()
+            # # test_stationarity(df)
+            # plt.savefig('img/TSA/decomp/KDD-%s.png'%affil)
+
+
+            # #ACF and PACF plots:
+            # lag_acf = acf(df, nlags=3)
+            # lag_pacf = pacf(df, nlags=3, method='ols')
+
+            # #Plot ACF:
+            # plt.subplot(121)
+            # plt.plot(lag_acf)
+            # plt.axhline(y=0,linestyle='--',color='gray')
+            # plt.axhline(y=-1.96/np.sqrt(len(df)),linestyle='--',color='gray')
+            # plt.axhline(y=1.96/np.sqrt(len(df)),linestyle='--',color='gray')
+            # plt.title('Autocorrelation Function')
+
+            # #Plot PACF:
+            # plt.subplot(122)
+            # plt.plot(lag_pacf)
+            # plt.axhline(y=0,linestyle='--',color='gray')
+            # plt.axhline(y=-1.96/np.sqrt(len(df)),linestyle='--',color='gray')
+            # plt.axhline(y=1.96/np.sqrt(len(df)),linestyle='--',color='gray')
+            # plt.title('Partial Autocorrelation Function')
+            # plt.tight_layout()
+
+            # # AR model
+            # plt.subplot(311)
+            # model = ARIMA(df, order=(1, 1, 0))
+            # results_AR = model.fit(disp=-1)
+            # plt.plot(df, label='Original')
+            # plt.plot(results_AR.fittedvalues, color='red', label='AR model')
+            # plt.title('RSS: %.4f'% np.sum((results_AR.fittedvalues-df[1:])**2)['score'])
+            # plt.legend(loc='best')
+
+            # # MA model
+            # plt.subplot(312)
+            # model = ARIMA(df, order=(1, 1, 0))
+            # results_MA = model.fit(disp=-1)
+            # plt.plot(df, label='Original')
+            # plt.plot(results_MA.fittedvalues, color='red', label='MA model')
+            # plt.title('RSS: %.4f'% np.sum((results_MA.fittedvalues-df[1:])**2)['score'])
+            # plt.legend(loc='best')
+
+            # combined model
+            # plt.subplot(313)
+            try:
+                model = ARIMA(df, order=(1, 1, 0))
+                results_ARIMA = model.fit(disp=-1)
+            except Exception, e:
+                print e
+                # import pdb;pdb.set_trace()
+                continue
+            # plt.plot(df, label='Original')
+            # plt.plot(results_ARIMA.fittedvalues, color='red', label='ARIMA')
+            # plt.title('RSS: %.4f'% np.sum((results_ARIMA.fittedvalues-df[1:])**2)['score'])
+            # plt.legend(loc='best')
+
+            predictions_ARIMA_diff = pd.Series(results_ARIMA.fittedvalues, copy=True)
+            # print predictions_ARIMA_diff.head()
+            predictions_ARIMA_diff_cumsum = predictions_ARIMA_diff.cumsum()
+            predictions_ARIMA =  pd.Series(np.array([df.ix[0]['score'] for i in range(len(df.index))]), index=df.index)
+            predictions_ARIMA = predictions_ARIMA.add(predictions_ARIMA_diff_cumsum,fill_value=0)
+
+            plt.plot(df_origin, label='Original')
+            # plt.title('RMSE: %.4f'% np.sqrt(np.sum((predictions_ARIMA-df)**2)['score']/len(df)))
+            plt.legend(loc='best')
+
+            # predict
+            pred_diff = results_ARIMA.predict('2015-01-31','2015-01-31', dynamic = True)
+            pred_diff_cumsum = pred_diff.cumsum()
+            preds =  pd.Series(np.array([predictions_ARIMA['2014-01-31'] for i in range(1)]), index=pd.DatetimeIndex(freq='12m', start='2015', periods=1))
+            preds = preds.add(pred_diff_cumsum)
             # import pdb;pdb.set_trace()
-            continue
-        # plt.plot(df, label='Original')
-        # plt.plot(results_ARIMA.fittedvalues, color='red', label='ARIMA')
-        # plt.title('RSS: %.4f'% np.sum((results_ARIMA.fittedvalues-df[1:])**2)['score'])
-        # plt.legend(loc='best')
+            plt.plot(pd.concat([predictions_ARIMA, preds]), label='Predicted')
+            plt.legend(loc='best')
+            # plt.show()
+            # plt.savefig('img/TSA/pred/KDD-%s.png'%affil)
 
-        predictions_ARIMA_diff = pd.Series(results_ARIMA.fittedvalues, copy=True)
-        # print predictions_ARIMA_diff.head()
-        predictions_ARIMA_diff_cumsum = predictions_ARIMA_diff.cumsum()
-        predictions_ARIMA =  pd.Series(np.array([df.ix[0]['score'] for i in range(len(df.index))]), index=df.index)
-        predictions_ARIMA = predictions_ARIMA.add(predictions_ARIMA_diff_cumsum,fill_value=0)
-        # plt.plot(df, label='Original')
-        # plt.plot(predictions_ARIMA)
-        # plt.title('RMSE: %.4f'% np.sqrt(np.sum((predictions_ARIMA-df)**2)['score']/len(df)))
-        # plt.legend(loc='best')
-
-        # predict
-        pred_diff = results_ARIMA.predict('2015-01-31','2015-01-31', dynamic = True)
-        # pred_diff = results_ARIMA.predict('2016-01-31','2018-01-31', dynamic = True)
-        pred_diff_cumsum = pred_diff.cumsum()
-        preds =  pd.Series(np.array([predictions_ARIMA['2014-01-31'] for i in range(1)]), index=pd.DatetimeIndex(freq='12m', start='2015', periods=1))
-        preds = preds.add(pred_diff_cumsum)
-        # plt.plot(pd.concat([predictions_ARIMA, preds]), label='Predicted')
-        # plt.legend(loc='best')
-        # plt.show()
-        # plt.savefig('img/TSA/pred/KDD-%s.png'%affil)
-
-        pred_affil_score[affil] = preds['2015-01-31']
-
+            pred_affil_score[affil] = preds['2015-01-31']
+    except Exception, e:
+        print e
+        import pdb;pdb.set_trace()
     return pred_affil_score
 
 
 
 if __name__ == '__main__':
     pred_affil_score = tsa_pred()
+    for affil in watching_affil:
+        if not affil in pred_affil_score:
+            pred_affil_score[affil] = np.mean([affil_scores_trends[affil]['2014'], affil_scores_trends[affil]['2013'],affil_scores_trends[affil]['2012'],affil_scores_trends[affil]['2011']])
+
+
     print pred_affil_score
     # import pdb;pdb.set_trace()
     results = get_selected_nodes(pred_affil_score, selected_affils)
