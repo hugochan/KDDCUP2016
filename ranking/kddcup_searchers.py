@@ -643,7 +643,7 @@ class TemporalSearcher:
         self.params[name] = value
 
 
-    def search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], rtype="affil", force=False):
+    def author_search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], rtype="affil", force=False):
         builder = kddcup_model.ModelBuilder()
         year_author_rating, watching_list, author_affils = builder.get_year_author_rating(conf_name, force=False)
 
@@ -661,14 +661,41 @@ class TemporalSearcher:
         # generating authors' watching list
         watching_list = author_scores.keys()[:n_top]
 
-        author_year_trends = builder.review_author_trends(year_author_rating, watching_list)
+        author_year_trends = builder.review_trends(year_author_rating, watching_list)
 
-        pred_author_trends = builder.pred_author_trends(author_year_trends)
-        author_scores = builder.calc_temporal_author_scores(author_scores, pred_author_trends)
+        new_trends = builder.pred_trends(author_year_trends)
+        author_scores = builder.calc_temporal_scores(author_scores, new_trends)
 
         n_author = None
         author_scores = OrderedDict(author_scores.items()[:n_author])
         affil_scores = builder.rate_affil_by_author(author_scores, author_affils)
+        results = get_selected_nodes(affil_scores, selected_affils)
+
+        return results
+
+
+    def affil_search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], rtype="affil", force=False):
+        builder = kddcup_model.ModelBuilder()
+        year_affil_rating, watching_list = builder.get_year_affil_rating(conf_name, force=False)
+
+        affil_scores = builder.get_ranked_affils_by_authors(conf_name, year, self.params['age_relev'], self.params['H'], self.params['alpha'], exclude_papers, expanded_year)
+
+        # affil_scores = kddcup_model.range_normalize(affil_scores)
+
+
+        affil_scores = OrderedDict(sorted(affil_scores.iteritems(), key=lambda d:d[1], reverse=True))
+        n_top = None
+
+
+        # generating affils' watching list
+        watching_list = affil_scores.keys()[:n_top]
+
+        affil_year_trends = builder.review_trends(year_affil_rating, watching_list, plot=False)
+
+        new_trends = builder.pred_trends(affil_year_trends)
+
+        affil_scores = builder.calc_temporal_scores(affil_scores, new_trends)
+
         results = get_selected_nodes(affil_scores, selected_affils)
 
         return results

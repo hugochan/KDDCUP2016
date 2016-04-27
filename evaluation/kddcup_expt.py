@@ -114,7 +114,8 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
         expand_year = []
         # expand_year = range(2005, 2011)
 
-        results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
+        # results = searcher.author_search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
+        results = searcher.affil_search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
 
     else:
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
