@@ -26,7 +26,7 @@ builder = None
 db = MyMySQL(db=config.DB_NAME, user=config.DB_USER, passwd=config.DB_PASSWD)
 
 
-def build_graph(conf_name, year, age_relev, H, alpha, min_topic_lift, min_ngram_lift, alg, exclude=[], expanded_year=[], force=False, save=True, load=False):
+def build_graph(conf_name, year, age_relev, H, alpha, min_topic_lift, min_ngram_lift, alg, exclude=[], expanded_year=[], expand_conf_year=[], force=False, save=True, load=False):
     """
     Utility method to build and return the graph model. First we check if a graph file
     exists. If not, we check if the builder class is already instantiated. If not, we do
@@ -50,11 +50,11 @@ def build_graph(conf_name, year, age_relev, H, alpha, min_topic_lift, min_ngram_
             graph = builder.build_affils(conf_name, year, age_relev, H, exclude)
 
         elif alg == 'MultiLayered':
-            graph = builder.build(conf_name, year, H, min_topic_lift, min_ngram_lift, exclude)
+            graph = builder.build(conf_name, year, H, min_topic_lift, min_ngram_lift, exclude, expand_conf_year)
 
         elif alg == 'IterProjectedLayered':
-            # graph = builder.build_projected_layers(conf_name, year, age_relev, H, alpha, exclude)
-            graph = builder.build_projected_layers2(conf_name, year, age_relev, H, alpha, exclude, expanded_year)
+            # graph = builder.build_projected_layers(conf_name, year, age_relev, H, alpha, exclude, expand_conf_year)
+            graph = builder.build_projected_layers2(conf_name, year, age_relev, H, alpha, exclude, expanded_year, expand_conf_year)
 
         # elif alg == 'IterProjectedLayered_mle':
             # graph = builder.build_projected_author_layer(conf_name, year, age_relev, H, alpha, exclude, expanded_year)
@@ -81,7 +81,7 @@ def build_graph(conf_name, year, age_relev, H, alpha, min_topic_lift, min_ngram_
     return graph
 
 
-def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=False, age_relev=0.0):
+def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=False, age_relev=0.0, expand_conf_year=[]):
     """
     Parameters
     -----------
@@ -100,6 +100,17 @@ def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=Fa
         expand_records, _, __ = get_selected_expand_pubs(conf_id, expand_year, _type='expanded')
         pub_records.update(expand_records)
         print 'expanded %s papers.'%len(expand_records)
+
+
+    # expand docs set by getting more papers accepted by related conferences
+    for conf, years in expand_conf_year:
+        conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf, limit=1)[0]
+        expand_records, _, __ = get_selected_expand_pubs(conf_id, years, _type='expanded')
+        pub_records.update(expand_records)
+        print 'expanded %s papers from %s.' % (len(expand_records), conf)
+
+
+
 
     current_year = config.PARAMS['current_year']
     old_year = config.PARAMS['old_year']
@@ -244,8 +255,8 @@ class SimpleSearcher():
         for k, v in params.items():
             self.params[k] = v
 
-    def search(self, selected_affils, conf_name, year, expand_year=[], age_decay=False, rtype="affil"):
-        rst = simple_search(selected_affils, conf_name, year, expand_year=expand_year, age_decay=age_decay, age_relev=self.params['age_relev'])
+    def search(self, selected_affils, conf_name, year, expand_year=[], expand_conf_year=[], age_decay=False, rtype="affil"):
+        rst = simple_search(selected_affils, conf_name, year, expand_year=expand_year, age_decay=age_decay, age_relev=self.params['age_relev'], expand_conf_year=expand_conf_year)
         return rst
 
 
@@ -304,7 +315,7 @@ class Searcher:
         return self.graph
 
 
-    def search(self, selected_affils, conf_name, year, exclude_papers=[], rtype="affil", force=False):
+    def search(self, selected_affils, conf_name, year, exclude_papers=[], expand_year=[], expand_conf_year=[], rtype="affil", force=False):
         """
         Checks if the graph model already exists, otherwise creates one and
         runs the ranking on the nodes.
@@ -316,7 +327,7 @@ class Searcher:
                             None,
                             self.params['min_topic_lift'],
                             self.params['min_ngram_lift'],
-                            self.name(), exclude_papers, [], force, load=True, save=self.save)
+                            self.name(), exclude_papers, expand_year, expand_conf_year, force, load=True, save=self.save)
 
         # Store number of nodes for checking later
         self.nnodes = graph.number_of_nodes()
@@ -440,21 +451,21 @@ class IterProjectedSearcher:
 
 
 
-    def easy_search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[]):
+    def easy_search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], expand_conf_year=[]):
         """
 
         """
         builder = kddcup_model.ModelBuilder()
 
         # scores = builder.get_ranked_affils_by_papers(conf_name, year, self.params['age_relev'], self.params['H'], self.params['alpha'], exclude=exclude_papers)
-        scores = builder.get_ranked_affils_by_authors(conf_name, year, self.params['age_relev'], self.params['H'], self.params['alpha'], exclude=exclude_papers, expanded_year=expanded_year)
+        scores = builder.get_ranked_affils_by_authors(conf_name, year, self.params['age_relev'], self.params['H'], self.params['alpha'], exclude=exclude_papers, expanded_year=expanded_year, expand_conf_year=expand_conf_year)
 
         results = get_selected_nodes(scores, selected_affils)
 
         return results
 
 
-    def search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], rtype="affil", force=False):
+    def search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], expand_conf_year=[], rtype="affil", force=False):
         """
         Checks if the graph model already exists, otherwise creates one and
         runs the ranking on the nodes.
@@ -466,7 +477,7 @@ class IterProjectedSearcher:
                             self.params['alpha'],
                             self.params['min_topic_lift'],
                             self.params['min_ngram_lift'],
-                            self.name(), exclude_papers, expanded_year, force, load=True, save=self.save)
+                            self.name(), exclude_papers, expanded_year, expand_conf_year, force, load=True, save=self.save)
 
         # Store number of nodes for checking later
         self.nnodes = graph.number_of_nodes()
@@ -643,6 +654,7 @@ class TemporalSearcher:
         self.params[name] = value
 
 
+
     def author_search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], rtype="affil", force=False):
         builder = kddcup_model.ModelBuilder()
         year_author_rating, watching_list, author_affils = builder.get_year_author_rating(conf_name, force=False)
@@ -674,21 +686,43 @@ class TemporalSearcher:
         return results
 
 
-    def affil_search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], rtype="affil", force=False):
+
+    def affil_search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], expand_conf_year=[], rtype="affil", force=False):
         builder = kddcup_model.ModelBuilder()
         year_affil_rating, watching_list = builder.get_year_affil_rating(conf_name, force=False)
 
-        affil_scores = builder.get_ranked_affils_by_authors(conf_name, year, self.params['age_relev'], self.params['H'], self.params['alpha'], exclude_papers, expanded_year)
 
-        # affil_scores = kddcup_model.range_normalize(affil_scores)
+        # different methods to compute long term score for affils
+        # we can use any method we used before
+
+        # 1) easy_search
+        affil_scores = builder.get_ranked_affils_by_authors(conf_name, year, self.params['age_relev'], self.params['H'], self.params['alpha'], exclude_papers, expanded_year, expand_conf_year)
+
+        # 2) simple_search
+        # affil_scores = dict(simple_search(selected_affils, conf_name, year, expanded_year, True, self.params['age_relev'], expand_conf_year=expand_conf_year))
+
+        # 3) multilayered
+        # s = Searcher(**config.PARAMS)
+        # s.set_params(**{
+        #                       'H': 0,
+        #                       'age_relev': 0.1, # 0.01
+        #                       'papers_relev': .99, # .99
+        #                       'authors_relev': .01, # .01
+        #                       'author_affils_relev': .99, # .99
+        #                       'alpha': 0.4}) # .4
+
+        # affil_scores = dict(s.search(selected_affils, conf_name, year, exclude_papers, expand_conf_year, force=True, rtype="affil"))
+
+
+
 
 
         affil_scores = OrderedDict(sorted(affil_scores.iteritems(), key=lambda d:d[1], reverse=True))
-        n_top = None
 
+        # import pdb;pdb.set_trace()
 
         # generating affils' watching list
-        watching_list = affil_scores.keys()[:n_top]
+        watching_list = affil_scores.keys()
 
         affil_year_trends = builder.review_trends(year_affil_rating, watching_list, plot=False)
 

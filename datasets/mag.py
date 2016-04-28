@@ -879,7 +879,7 @@ def get_conf_pubs(conf_id=None, year=None):
             ['papers', 'paper_author_affils'], join_on=['id', 'paper_id'], \
             where=where_cond)
 
-    # import pdb;pdb.set_trace()
+
     # re-pack data to this format: {paper_id: {author_id:[affil_id,],},}
     pub_records = defaultdict()
     for paper_id, author_id, affil_id, year in rst:
@@ -1237,6 +1237,12 @@ def import_more_conf_pubs(conf_name):
     elif conf_name == 'ICML':
         from datasets.expanded_ICML import py_icml
         db.insert(into=table_name, fields=fields, values=py_icml, ignore=True)
+    elif conf_name == 'ICDM':
+        from datasets.expanded_ICDM import py_icdm
+        db.insert(into=table_name, fields=fields, values=py_icdm, ignore=True)
+
+
+
 
 # for SimpleSearcher
 def get_selected_expand_pubs(conf, year, _type="selected"):
@@ -1358,7 +1364,8 @@ if __name__ == '__main__':
     # import_more_conf_pubs('SIGIR')
     # import_more_conf_pubs('SIGMOD')
     # import_more_conf_pubs('SIGCOMM')
-    import_more_conf_pubs('KDD')
-    import_more_conf_pubs('ICML')
+    # import_more_conf_pubs('KDD')
+    # import_more_conf_pubs('ICML')
+    import_more_conf_pubs('ICDM')
     # get_conf_pubs(conf_id='460A7036', year=range(2000,2011))
     # pass

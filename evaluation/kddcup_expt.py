@@ -79,10 +79,13 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     start = time.time()
 
     if searcher.name() == "SimpleSearcher":
-        # expand_year = []
+        expand_year = []
         # expand_year = [2001]
-        expand_year = range(2001, 2011)
-        results = searcher.search(selected_affils, conf_name, year, expand_year=expand_year, age_decay=True, rtype="affil")
+        # expand_year = range(2001, 2011)
+
+        expand_conf_year = [("ICDM", range(2011, 2014))]
+
+        results = searcher.search(selected_affils, conf_name, year, expand_year=expand_year, expand_conf_year=expand_conf_year, age_decay=True, rtype="affil")
 
     elif searcher.name() == "RegressionSearcher":
         expand_year = []
@@ -98,9 +101,10 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     elif searcher.name() == "IterProjectedLayered":
         # expand_year = []
         expand_year = range(2008, 2011)
+        expand_conf_year = [("ICDM", range(2011, 2014))]
 
-        results = searcher.easy_search(selected_affils, conf_name, year, exclude_papers, expand_year)
-        # results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
+        results = searcher.easy_search(selected_affils, conf_name, year, exclude_papers, expand_year, expand_conf_year)
+        # results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, expand_conf_year, force=True, rtype="affil")
         # results = searcher.mle_search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
 
     elif searcher.name() == "StatSearcher":
@@ -113,12 +117,16 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     elif searcher.name() == "TemporalSearcher":
         expand_year = []
         # expand_year = range(2005, 2011)
+        expand_conf_year = [("ICDM", range(2011, 2014))]
 
         # results = searcher.author_search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
-        results = searcher.affil_search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
+        results = searcher.affil_search(selected_affils, conf_name, year, exclude_papers, expand_year, expand_conf_year=[], force=True, rtype="affil")
 
     else:
-        results = searcher.search(selected_affils, conf_name, year, exclude_papers, force=True, rtype="affil")
+        expand_year = []
+        expand_conf_year = [("ICDM", range(2011, 2014))]
+
+        results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, expand_conf_year, force=True, rtype="affil")
 
     metrics["Time"] = time.time() - start
 
@@ -171,13 +179,13 @@ def main():
             ]
 
     searchers = [
-                    # SimpleSearcher(**config.PARAMS),
+                    SimpleSearcher(**config.PARAMS),
                     # RegressionSearcher(**config.PARAMS),
                     # Searcher(**config.PARAMS),
                     # ProjectedSearcher(**config.PARAMS),
                     # IterProjectedSearcher(**config.PARAMS),
                     # StatSearcher(**config.PARAMS),
-                    TemporalSearcher(**config.PARAMS)
+                    # TemporalSearcher(**config.PARAMS)
                 ]
 
     selected_affils = db.select(fields="id", table="selected_affils")
@@ -201,7 +209,7 @@ def main():
 
             if s.name() == "SimpleSearcher":
                 s.set_params(**{
-                              'age_relev': .0, # .5, .7, .08, .2
+                              'age_relev': .2, # .5, .7, .08, .2
                               })
 
             if s.name() == "RegressionSearcher":

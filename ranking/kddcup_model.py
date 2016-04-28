@@ -246,7 +246,7 @@ class ModelBuilder:
     return [(u, v, 1.0) for (u, v) in edges]
 
 
-  def get_pubs_layer(self, conf_name, year, n_hops, exclude_list=[], expand_method='n_hops'):
+  def get_pubs_layer(self, conf_name, year, n_hops, exclude_list=[], expanded_year=[], expand_conf_year=[], expand_method='conf'):
     """
     First documents are retrieved from pub records of a targeted conference.
     Then we follow n_hops from these nodes to have the first layer of the graph (papers).
@@ -274,7 +274,6 @@ class ModelBuilder:
       # Expand the docs by getting more papers from the targeted conference
       # expanded_pubs = self.get_expanded_pubs_by_conf(conf_name, [2009, 2010])
       nodes = set(docs)
-      expanded_year = range(2005, 2011)
 
       expanded_pubs = self.get_expanded_pubs_by_conf2(conf_name, expanded_year)
 
@@ -286,6 +285,23 @@ class ModelBuilder:
       if expanded_pubs:
         expanded_docs = set(zip(*expanded_pubs)[0]) - set(exclude_list)
         nodes.update(expanded_docs)
+
+
+
+      # expand docs set by getting more papers accepted by related conferences
+      for conf, years in expand_conf_year:
+        conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf, limit=1)[0]
+        expanded_pubs = self.get_expanded_pubs_by_conf2(conf, years)
+
+        # add year
+        for paper, year in expanded_pubs:
+          self.pub_years[paper] = year
+
+        # Remove documents from the exclude list and keep only processed ids
+        if expanded_pubs:
+          expanded_docs = set(zip(*expanded_pubs)[0]) - set(exclude_list)
+          nodes.update(expanded_docs)
+
 
       self.edges_lookup = GraphBuilder(get_all_edges(nodes))
 
@@ -315,6 +331,7 @@ class ModelBuilder:
     expanded_pubs = get_conf_docs(conf_id, year)
 
     return expanded_pubs
+
 
   def get_expanded_pubs_by_conf2(self, conf_name, year):
     if not year:
@@ -1353,7 +1370,9 @@ class ModelBuilder:
     return affils, affil_affil_edges
 
 
-  def get_projected_author_layer(self, conf_name, year, age_relev, exclude=[], expanded_year=[]):
+
+
+  def get_projected_author_layer(self, conf_name, year, age_relev, exclude=[], expanded_year=[], expand_conf_year=[]):
     """
     projects paper layer onto author layer.
     """
@@ -1373,6 +1392,15 @@ class ModelBuilder:
       pubs.update(pubs2)
       authors.update(authors2)
 
+
+    # expand docs set by getting more papers accepted by related conferences
+    for conf, years in expand_conf_year:
+      conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf, limit=1)[0]
+      pubs2, authors2, _ = get_selected_expand_pubs(conf_id, years, _type='expanded')
+      docs2 = set(pubs2.keys()) - set(exclude)
+      docs.update(docs2)
+      pubs.update(pubs2)
+      authors.update(authors2)
 
 
     self.edges_lookup = GraphBuilder(get_all_edges(docs))
@@ -1536,14 +1564,14 @@ class ModelBuilder:
 
 
 
-  def build(self, conf_name, year, n_hops, min_topic_lift, min_ngram_lift, exclude=[], expanded_year=[]):
+  def build(self, conf_name, year, n_hops, min_topic_lift, min_ngram_lift, exclude=[], expanded_year=[], expand_conf_year=[]):
     """
     Build graph model from given conference.
     """
 
     log.debug("Building model for conference='%s' and hops=%d." % (conf_name, n_hops))
 
-    pubs, citation_edges = self.get_pubs_layer(conf_name, year, n_hops, set(exclude))
+    pubs, citation_edges = self.get_pubs_layer(conf_name, year, n_hops, set(exclude), expanded_year, expand_conf_year)
     log.debug("%d pubs and %d citation edges." % (len(pubs), len(citation_edges)))
     print "%d pubs and %d citation edges." % (len(pubs), len(citation_edges))
     authors, coauth_edges, auth_edges = self.get_authors_layer(pubs)
@@ -1643,7 +1671,7 @@ class ModelBuilder:
 
 
 
-  def get_ranked_affils_by_authors(self, conf_name, year, age_relev, n_hops, alpha, exclude=[], expanded_year=[]):
+  def get_ranked_affils_by_authors(self, conf_name, year, age_relev, n_hops, alpha, exclude=[], expanded_year=[], expand_conf_year=[]):
     # # 0)
     # docs, citation_edges, paper_authors, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude)
     # # run pagerank on author layer
@@ -1675,7 +1703,7 @@ class ModelBuilder:
 
 
     # 1) page layer -> author layer
-    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude, expanded_year)
+    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude, expanded_year, expand_conf_year)
 
     # 1) run pagerank on author layer
     graph = self.assemble_layers(None, None,
@@ -1774,7 +1802,7 @@ class ModelBuilder:
     return graph
 
 
-  def build_projected_layers2(self, conf_name, year, age_relev, n_hops, alpha, exclude=[], expanded_year=[]):
+  def build_projected_layers2(self, conf_name, year, age_relev, n_hops, alpha, exclude=[], expanded_year=[], expand_conf_year=[]):
     # # 0)
     # docs, citation_edges, paper_authors, paper_affils = self.get_paper_affils(conf_name, year, age_relev, exclude)
     # # run pagerank on author layer
@@ -1805,7 +1833,7 @@ class ModelBuilder:
 
 
     # 1) page layer -> author layer
-    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude, expanded_year)
+    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude, expanded_year, expand_conf_year)
 
     # run pagerank on author layer
     graph = self.assemble_layers(None, None,
@@ -2183,7 +2211,7 @@ class ModelBuilder:
 
 
 
-  def pred_trends(self, year_trends, end_year='2014'):
+  def pred_trends(self, year_trends, end_year='2014', scalar=.4):
     """
     predicate trends and variance based on historical records.
     """
@@ -2209,9 +2237,7 @@ class ModelBuilder:
       #   continue
 
       # variance or fluctuation
-      # sigma = np.var(scores)
 
-      # sigma = np.mean([abs(scores[i] - scores[i + 1]) for i in range(len(scores) - 1)]) if len(scores) > 1 else .0
       sigma = np.mean([abs(scores[i] - scores[i + 1]) for i in range(len(scores) - 1) if not scores[i] == scores[i + 1]]) if len(scores) > 1 else .0
 
       # trend, 1 stands for going up, -1 stands for going down, 0 stands for keeping stable
@@ -2220,16 +2246,13 @@ class ModelBuilder:
       # works well in practice!
 
       if abs(scores[-1] - np.mean(scores)) <= .4 * sigma:
-      # if abs((scores[-1] - np.mean(scores)) / np.mean(scores)) <= .4:
         trend = .0
       elif scores[-1] < np.mean(scores):
         # trend = 1.0
         trend = min(abs(scores[-1] - np.mean(scores)) / sigma, 1.0)
-      elif scores[-1] > np.mean(scores):
+      else:
         # trend = -1.0
         trend = -min(abs(scores[-1] - np.mean(scores)) / sigma, 1.0)
-      else:
-        trend = .0
 
 
       if trend > 0 and scores[-1] < year_trends[stuff][str(int(end_year)+1)]:
@@ -2242,9 +2265,18 @@ class ModelBuilder:
         # import pdb;pdb.set_trace()
         pass
 
-      new_trends[stuff] = trend * sigma
+        # # test, assuming we can predict the trends perfectly
+        # if scores[-1] < year_trends[stuff][str(int(end_year)+1)]:
+        #   trend = 1
+        # elif scores[-1] > year_trends[stuff][str(int(end_year)+1)]:
+        #   trend = -1
+        # else:
+        #   trend = 0
 
-    print "correct trend pred ratio: %s/%s" % (count_correct, len(new_trends))
+      # scalar .4
+      new_trends[stuff] = sigmoid(scalar * trend * sigma / np.mean(scores)) # compute the factor of changes
+
+    print "precision of trend pred: %s/%s" % (count_correct, len(new_trends))
 
     return new_trends
 
@@ -2253,11 +2285,11 @@ class ModelBuilder:
 
   def calc_temporal_scores(self, scores, pred_trends, scalar=1.0):
     print "# of comm authors: %s" % len(set(scores.keys()) & set(pred_trends.keys()))
-    scalar = .001
+    # scalar = 1.0
 
     # normalize
-    scores = range_normalize(scores)
-    pred_trends = range_normalize(pred_trends)
+    # scores = range_normalize(scores)
+    # pred_trends = range_normalize(pred_trends)
 
     # import pdb;pdb.set_trace()
     temporal_scores = defaultdict()
@@ -2265,7 +2297,8 @@ class ModelBuilder:
       if not each in scores:
         continue
 
-      temporal_scores[each] = scores[each] + scalar * trend
+      # temporal_scores[each] = scores[each] + scalar * trend
+      temporal_scores[each] = scores[each] * (1 + trend)
 
     temporal_scores = OrderedDict(sorted(temporal_scores.iteritems(), key=lambda d:d[1], reverse=True))
 
@@ -2306,9 +2339,9 @@ class ModelBuilder:
 
 
 
-  def rate_projected_authors(self, conf_name, year, age_relev, n_hops, alpha, exclude=[], expanded_year=[]):
+  def rate_projected_authors(self, conf_name, year, age_relev, n_hops, alpha, exclude=[], expanded_year=[], expand_conf_year=[]):
     # 1) page layer -> author layer
-    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude, expanded_year)
+    authors, author_author_edges, coauthor_edges, author_affils = self.get_projected_author_layer(conf_name, year, age_relev, exclude, expanded_year, expand_conf_year)
 
     # 1) run pagerank on author citation layer
     graph = self.assemble_layers(None, None,
@@ -2335,6 +2368,10 @@ class ModelBuilder:
     author_scores = {graph.node[nid]['entity_id']: float(score) for nid, score in author_scores.items()}
 
     return author_scores, author_affils
+
+
+def sigmoid(x):
+  return 2 * np.exp(x) / (1 + np.exp(x)) - 1
 
 
 def normalize(x):
