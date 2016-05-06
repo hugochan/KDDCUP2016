@@ -13,6 +13,7 @@ import config
 
 from collections import defaultdict, OrderedDict
 import os
+import json
 import networkx as nx
 import numpy as np
 from mymysql.mymysql import MyMySQL
@@ -81,7 +82,7 @@ def build_graph(conf_name, year, age_relev, H, alpha, min_topic_lift, min_ngram_
     return graph
 
 
-def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=False, age_relev=0.0, expand_conf_year=[]):
+def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=False, age_relev=0.0, expand_conf_year=[], online_search=True):
     """
     Parameters
     -----------
@@ -92,12 +93,12 @@ def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=Fa
             Specifies targeted years
     """
     affil_scores = defaultdict()
-    pub_records, _, __ = get_selected_expand_pubs(conf_name, year, _type='selected')
+    pub_records, _, __ = get_selected_expand_pubs(conf_name, year, _type='selected', online_search=online_search)
 
     # expand docs set by getting more papers accepted by the targeted conference
     if expand_year:
         conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
-        expand_records, _, __ = get_selected_expand_pubs(conf_id, expand_year, _type='expanded')
+        expand_records, _, __ = get_selected_expand_pubs(conf_id, expand_year, _type='expanded', online_search=online_search)
         pub_records.update(expand_records)
         print 'expanded %s papers.'%len(expand_records)
 
@@ -105,7 +106,7 @@ def simple_search(selected_affils, conf_name, year, expand_year=[], age_decay=Fa
     # expand docs set by getting more papers accepted by related conferences
     for conf, years in expand_conf_year:
         conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf, limit=1)[0]
-        expand_records, _, __ = get_selected_expand_pubs(conf_id, years, _type='expanded')
+        expand_records, _, __ = get_selected_expand_pubs(conf_id, years, _type='expanded', online_search=online_search)
         pub_records.update(expand_records)
         print 'expanded %s papers from %s.' % (len(expand_records), conf)
 
@@ -255,8 +256,8 @@ class SimpleSearcher():
         for k, v in params.items():
             self.params[k] = v
 
-    def search(self, selected_affils, conf_name, year, expand_year=[], expand_conf_year=[], age_decay=False, rtype="affil"):
-        rst = simple_search(selected_affils, conf_name, year, expand_year=expand_year, age_decay=age_decay, age_relev=self.params['age_relev'], expand_conf_year=expand_conf_year)
+    def search(self, selected_affils, conf_name, year, expand_year=[], expand_conf_year=[], online_search=True, age_decay=False, rtype="affil"):
+        rst = simple_search(selected_affils, conf_name, year, expand_year=expand_year, age_decay=age_decay, age_relev=self.params['age_relev'], expand_conf_year=expand_conf_year, online_search=online_search)
         return rst
 
 
@@ -689,7 +690,7 @@ class TemporalSearcher:
 
     def affil_search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], expand_conf_year=[], rtype="affil", force=False):
         builder = kddcup_model.ModelBuilder()
-        year_affil_rating, watching_list = builder.get_year_affil_rating(conf_name, force=False)
+        year_affil_rating, watching_list = builder.get_year_affil_rating(conf_name, force=True)
 
 
         # different methods to compute long term score for affils
@@ -733,6 +734,73 @@ class TemporalSearcher:
         results = get_selected_nodes(affil_scores, selected_affils)
 
         return results
+
+
+
+
+class SupervisedSearcher:
+    """
+    Basic searcher class for the supervised learning model.
+    """
+
+    def __init__(self):
+        pass
+
+    def name(self):
+        return "SupervisedSearcher"
+
+
+    def search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], expand_conf_year=[], rtype="affil", force=False):
+        builder = kddcup_model.ModelBuilder()
+        builder.get_all_metadata(conf_name, year)
+
+        return
+
+
+
+class Bagging:
+    """
+    Basic searcher class for the a Temporal method.
+    """
+
+    def __init__(self):
+        pass
+
+    def name(self):
+        return "Bagging"
+
+
+    def bagging(self, conf_name, searchers):
+
+        affil_rankings = defaultdict(dict)
+        for s in searchers:
+            # read from disk
+            with open("rst_%s_%s.json"%(conf_name, s), 'r') as f:
+                affil_rankings[s] = json.load(f)
+                f.close()
+
+            # with open("%s_%s_score.json"%(conf_name, s), 'r') as f:
+            #     affil_rankings[s] = json.load(f)
+            #     f.close()
+
+
+
+        # bagging
+        # avg
+        bagging_rst = defaultdict(float)
+        for each_ranking in affil_rankings.values():
+            for affil, rank in each_ranking.iteritems():
+                bagging_rst[affil] += rank
+
+        const = len(bagging_rst) * 2
+        bagging_rst = {x:const - y/float(len(searchers)) for x, y in bagging_rst.iteritems()}
+
+
+
+        bagging_rst = sorted(bagging_rst.iteritems(), key=lambda d:d[1], reverse=True)
+
+        return bagging_rst
+
 
 
 

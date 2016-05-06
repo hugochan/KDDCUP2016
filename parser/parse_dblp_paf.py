@@ -1,3 +1,4 @@
+# coding=utf-8
 '''
 Created on Mar 28, 2016
 
@@ -648,79 +649,88 @@ def search_authors(author_name):
     search_url = "%ssearch?q=%s" % (BASE_URL, '+'.join(author_name.split(' ')))
     resp = requests.get(search_url)
 
-    if resp.status_code == 200:
-        # get the url of homepage
-        # import pdb;pdb.set_trace()
-        if re.search('<em>show all', resp.content):
-            search_url = "%ssearch/author?q=%s" % (BASE_URL, '+'.join(author_name.split(' ')))
-            root = lxml.html.parse(search_url)
-        else:
-            root = lxml.html.fromstring(resp.content)
-        # check only exact matches
-        if not root.xpath("//div[@id='completesearch-authors']/div/p[text()='Exact matches']"):
-            if not root.xpath("//div[@id='completesearch-authors']/div/p[text()='Likely matches']"):
-                return []
+    try:
+        if resp.status_code == 200:
+            # get the url of homepage
+            # import pdb;pdb.set_trace()
+            if re.search('<em>show all', resp.content):
+                search_url = "%ssearch/author?q=%s" % (BASE_URL, '+'.join(author_name.split(' ')))
+                root = lxml.html.parse(search_url)
+            else:
+                root = lxml.html.fromstring(resp.content)
+            # check only exact matches
+            if not root.xpath("//div[@id='completesearch-authors']/div/p[text()='Exact matches']"):
+                if not root.xpath("//div[@id='completesearch-authors']/div/p[text()='Likely matches']"):
+                    return []
 
-        authors = root.xpath("//div[@id='completesearch-authors']/div/ul[1]/li")
+            authors = root.xpath("//div[@id='completesearch-authors']/div/ul[1]/li")
 
-        homepages = []
+            homepages = []
 
-        for each_author in authors:
-            rst = homepage_prog1.search(lxml.etree.tostring(each_author))
-            if rst:
-                rst = homepage_prog2.search(rst.group(0))
+            for each_author in authors:
+                rst = homepage_prog1.search(lxml.etree.tostring(each_author))
                 if rst:
-                    partital_url = rst.group(0).replace('hd/','').replace('"','')
-                    url = "%spers/xx/%s.xml" % (BASE_URL, partital_url)
-                    resp = requests.get(url)
+                    rst = homepage_prog2.search(rst.group(0))
+                    if rst:
+                        partital_url = rst.group(0).replace('hd/','').replace('"','')
+                        url = "%spers/xx/%s.xml" % (BASE_URL, partital_url)
+                        resp = requests.get(url)
 
-                    if resp.status_code == 200:
-                        # import pdb;pdb.set_trace()
-                        homepages.append(resp.content)
+                        if resp.status_code == 200:
+                            # import pdb;pdb.set_trace()
+                            homepages.append(resp.content)
 
-                    elif resp.status_code == 404:
-                        # The page is not found
-                        # Searches homepage directly by author name
-                        # print "failed to find author: %s (cannot find the homepage.)" % (author_name)
-                        pass
+                        elif resp.status_code == 404:
+                            # The page is not found
+                            # Searches homepage directly by author name
+                            # print "failed to find author: %s (cannot find the homepage.)" % (author_name)
+                            pass
 
-                    elif resp.status_code == 429:
-                        # Too Many Requests
-                        try:
-                            # print resp.headers
-                            twait = int(resp.headers["Retry-After"])
-                        except Exception, e:
-                            print e
-                            twait = 30 # default
+                        elif resp.status_code == 429:
+                            # Too Many Requests
+                            try:
+                                # print resp.headers
+                                twait = int(resp.headers["Retry-After"])
+                            except Exception, e:
+                                print e
+                                twait = 30 # default
 
-                        time.sleep(twait)
-                        print 'wait %s seconds. Retry...' % twait
+                            time.sleep(twait)
+                            print 'wait %s seconds. Retry...' % twait
 
-                        return search_authors(author_name)
+                            return search_authors(author_name)
 
-            # print "failed to find author: %s (unknown reasons.)" % (author_name)
-        return homepages
+        elif resp.status_code == 404:
+            print "search API does not work currently."
+            return []
 
-    elif resp.status_code == 404:
-        print "search API does not work currently."
+
+        elif resp.status_code == 429:
+            # Too Many Requests
+            try:
+                # print resp.headers
+                twait = int(resp.headers["Retry-After"])
+            except Exception, e:
+                print e
+                twait = 30 # default
+
+            time.sleep(twait)
+            print 'wait %s seconds. Retry...' % twait
+
+            return search_authors(author_name)
+
+        else:
+            return []
+
+    except Exception, e:
+        print e
+        import pdb;pdb.set_trace()
         return []
-
-    elif resp.status_code == 429:
-        # Too Many Requests
-        try:
-            # print resp.headers
-            twait = int(resp.headers["Retry-After"])
-        except Exception, e:
-            print e
-            twait = 30 # default
-
-        time.sleep(twait)
-        print 'wait %s seconds. Retry...' % twait
-
-        return search_authors(author_name)
+        # print "failed to find author: %s (unknown reasons.)" % (author_name)
 
     else:
-        return []
+        return homepages
+
 
 def search_affils_by_author_paper(author_name, paper_title):
     """
@@ -753,7 +763,7 @@ def search_affils_by_author_paper(author_name, paper_title):
             ee = pub[0].parentNode.getElementsByTagName('ee')
             if ee:
                 url = ee[0].firstChild.nodeValue
-                print url
+
                 if 'acm' in url.split('.'): # acm digital library
                     resp = requests.get(url)
 
@@ -761,7 +771,10 @@ def search_affils_by_author_paper(author_name, paper_title):
                         try:
                             # import pdb;pdb.set_trace()
                             root = lxml.html.fromstring(resp.content)
-                            href = root.xpath("//tr/td/a[text()='%s']"%author_name.title())
+                            try:
+                                href = root.xpath("//tr/td/a[text()='%s']"%author_name.title())
+                            except:
+                                href = None
 
                             if not href: # not matched probably because the author name has special char (e.g., European char)
                                 href = root.xpath("//tr/td/a[text()='%s']"%dblp_name.title())
@@ -776,6 +789,7 @@ def search_affils_by_author_paper(author_name, paper_title):
                                 #         continue
 
                             if not href:
+                                print url
                                 break
 
                             tr = href[0].getparent().getparent()
@@ -792,6 +806,7 @@ def search_affils_by_author_paper(author_name, paper_title):
 
                         except Exception, e:
                             print e
+                            print url
                             import pdb;pdb.set_trace()
                             break
 
@@ -809,6 +824,7 @@ def search_affils_by_author_paper(author_name, paper_title):
 
                                 except Exception, e:
                                     print e
+                                    print url
                                     # import pdb;pdb.set_trace()
                                     break
 
@@ -859,30 +875,50 @@ def search_affils_by_author_paper(author_name, paper_title):
 
                     if resp.status_code == 200:
                         try:
-                            # import pdb;pdb.set_trace()
                             root = lxml.html.fromstring(resp.content)
-                            # it's stupid to split name and match it piece by piece, but it looks like we have no choice here
-                            name = dblp_name.title().split()
 
-                            candidates = set(root.xpath("//span[@class='AuthorName'][contains(text(),'%s')]"%name[0]))
-                            for each in name[1:]:
-                                candidates = candidates & set(root.xpath("//span[@class='AuthorName'][contains(text(),'%s')]"%each))
+                            if 'IEEE Xplore' in resp.content:
+                                try:
+                                    f1 = root.xpath("//span[@class='%s'][@id='preferredName']" % ' '.join([x+'.' if len(x)==1 else x for x in author_name.title().split()]))
+                                    if not f1:
+                                        f1 = root.xpath("//span[@class='%s'][@id='preferredName']" % ' '.join([x+'.' if len(x)==1 else x for x in author_name.title().split()]))
 
-                            if not candidates:
-                                break
-                            try:
-                                affil_name = list(candidates)[0].getparent().xpath("span")[1].xpath("span/span[@class='AuthorsName_affiliation']/span")[0].text
-                                affils.add(affil_name)
-                            except:
-                                break
+                                    affil_name = f1[0].getparent().xpath("span[@id='authorAffiliations']")[0].get('class')
+                                    if affil_name:
+                                        affils.add(affil_name)
+
+                                except Exception, e:
+                                    print e
+                                    print url
+                                    # import pdb;pdb.set_trace()
+
+
+                            else:
+                                # it's stupid to split name and match it piece by piece, but it looks like we have no choice here
+                                name = dblp_name.title().split()
+                                candidates = set(root.xpath("//span[@class='AuthorName'][contains(text(),'%s')]"%name[0]))
+                                for each in name[1:]:
+                                    candidates = candidates & set(root.xpath("//span[@class='AuthorName'][contains(text(),'%s')]"%each))
+
+                                if not candidates:
+                                    print url
+                                    break
+                                try:
+                                    affil_name = list(candidates)[0].getparent().xpath("span")[1].xpath("span/span[@class='AuthorsName_affiliation']/span")[0].text
+                                    affils.add(affil_name)
+                                except:
+                                    print url
+                                    break
 
                         except Exception, e:
                             print e
+                            print url
                             import pdb;pdb.set_trace()
                             break
 
                     elif resp.status_code == 404:
                         print "search API does not work currently."
+                        print url
                         break
 
                     elif resp.status_code == 429:
@@ -899,9 +935,11 @@ def search_affils_by_author_paper(author_name, paper_title):
 
                         return search_affils_by_author_paper(author_name, paper_title)
                     else:
+                        print url
                         break
 
                 else:
+                    print url
                     break
             else:
                 break
@@ -1058,5 +1096,5 @@ if __name__ == "__main__":
     # # print affils
 
     # dblp_key, affil_names = search_affils_by_author_paper('Francois Poulet', 'Integrating heterogeneous information within a social network for detecting communities.')
-    dblp_key, affil_names = search_affils_by_author_paper('nguyenkhang pham', 'A comparison of different off-centered entropies to deal with class imbalance for decision trees')
+    dblp_key, affil_names = search_affils_by_author_paper('Martin van den Berg', 'Discourse Structure and Sentiment')
     print dblp_key, affil_names

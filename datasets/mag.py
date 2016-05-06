@@ -1036,7 +1036,7 @@ def get_paper_title_by_id(paper_id):
 # if paper_id is set, we use paper_id to confirm the exact author
 # when there are multiple author-affil pairs
 # which may be caused by shared author names
-def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
+def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None, force=True):
     """
     we check csx_paper_author_affils table and do string matching which is knotty.
     """
@@ -1073,7 +1073,7 @@ def retrieve_affils_by_authors(author_id, table_name='csx', paper_id=None):
                 dblp_key = dblp_key[0]
             affil_names = db.select("affil_name", table_dblp_auth_affil_ext, where="dblp_key='%s'"%dblp_key)
 
-        if not affil_names:
+        if force and not affil_names:
             if paper_title:
                 dblp_key, affil_names = search_affils_by_author_paper(author_name, paper_title)
                 if affil_names:
@@ -1245,7 +1245,7 @@ def import_more_conf_pubs(conf_name):
 
 
 # for SimpleSearcher
-def get_selected_expand_pubs(conf, year, _type="selected"):
+def get_selected_expand_pubs(conf, year, _type="selected", online_search=True):
     """
     Get expanded pub records from selected conferences in selected years.
     """
@@ -1319,7 +1319,7 @@ def get_selected_expand_pubs(conf, year, _type="selected"):
                 # retrieved_affil_ids = None # turn off
                 # import pdb;pdb.set_trace()
 
-                retrieved_affil_ids, flag = retrieve_affils_by_authors(author_id, table_name='dblp', paper_id=paper_id)
+                retrieved_affil_ids, flag = retrieve_affils_by_authors(author_id, table_name='dblp', paper_id=paper_id, force=online_search)
                 if flag == 1:
                     get_affil_count += 1
                 # retrieved_affil_ids = retrieve_affils_by_author_papers(author_id, paper_id, table_name='csx')

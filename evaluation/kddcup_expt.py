@@ -7,7 +7,7 @@ from mymysql.mymysql import MyMySQL
 import config
 from collections import defaultdict
 import time
-
+import json
 # import logging as log
 import os
 import cPickle
@@ -16,7 +16,7 @@ from evaluation.metrics import ndcg2
 from datasets.mag import get_selected_docs
 from ranking.kddcup_searchers import simple_search, SimpleSearcher, RegressionSearcher, \
                     Searcher, ProjectedSearcher, IterProjectedSearcher, StatSearcher, \
-                    TemporalSearcher
+                    TemporalSearcher, Bagging
 
 
 # log.basicConfig(format='%(asctime)s [%(levelname)s] : %(message)s', level=log.INFO)
@@ -66,7 +66,7 @@ def save_results(conf_id, results, file_path) :
     f.close()
 
 
-def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher, exclude_papers=[], show=True, results_file=None) :
+def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher, exclude_papers=[], show=True, results_file=None, bagging_list=[]) :
     '''
     Run searches on each conference (conference -> ground truth) and return
     the evaluate metric for each instance. Right now the metrics being
@@ -83,9 +83,10 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
         # expand_year = [2001]
         # expand_year = range(2001, 2011)
 
-        expand_conf_year = [("ICDM", range(2011, 2014))]
-
-        results = searcher.search(selected_affils, conf_name, year, expand_year=expand_year, expand_conf_year=expand_conf_year, age_decay=True, rtype="affil")
+        expand_conf_year = []
+        # expand_conf_year = [("ICDM", range(2011, 2014))]
+        online_search = False
+        results = searcher.search(selected_affils, conf_name, year, expand_year=expand_year, expand_conf_year=expand_conf_year, online_search=online_search, age_decay=True, rtype="affil")
 
     elif searcher.name() == "RegressionSearcher":
         expand_year = []
@@ -99,9 +100,11 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
 
     elif searcher.name() == "IterProjectedLayered":
-        # expand_year = []
-        expand_year = range(2008, 2011)
-        expand_conf_year = [("ICDM", range(2011, 2014))]
+        expand_year = []
+        # expand_year = range(2008, 2011)
+        # expand_conf_year = [("ICDM", range(2011, 2014))]
+        expand_conf_year = []
+
 
         results = searcher.easy_search(selected_affils, conf_name, year, exclude_papers, expand_year, expand_conf_year)
         # results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, expand_conf_year, force=True, rtype="affil")
@@ -117,21 +120,54 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     elif searcher.name() == "TemporalSearcher":
         expand_year = []
         # expand_year = range(2005, 2011)
-        expand_conf_year = [("ICDM", range(2011, 2014))]
+        # expand_conf_year = [("ICDM", range(2011, 2014))]
+        expand_conf_year = []
 
         # results = searcher.author_search(selected_affils, conf_name, year, exclude_papers, expand_year, force=True, rtype="affil")
         results = searcher.affil_search(selected_affils, conf_name, year, exclude_papers, expand_year, expand_conf_year=[], force=True, rtype="affil")
 
-    else:
+    elif searcher.name() == "MultiLayered":
         expand_year = []
-        expand_conf_year = [("ICDM", range(2011, 2014))]
+        # expand_conf_year = [("ICDM", range(2011, 2014))]
+        expand_conf_year = []
 
         results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, expand_conf_year, force=True, rtype="affil")
+
+
+    elif searcher.name() == "SupervisedSearcher":
+        expand_year = []
+        # expand_conf_year = [("ICDM", range(2011, 2014))]
+        expand_conf_year = []
+
+        results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, expand_conf_year, force=True, rtype="affil")
+
+
+    elif searcher.name() == "Bagging":
+        results = searcher.bagging(conf_name, bagging_list)
+
+
+    else:
+        return None
+
+
 
     metrics["Time"] = time.time() - start
 
     actual, relevs = zip(*ground_truth)
     pred = zip(*results)[0]
+
+    # write to disk
+    with open("%s_%s.json"%(conf_name, searcher.name()), 'w') as f:
+        json.dump(dict(zip(pred, range(len(pred)))), f)
+        f.close()
+
+
+    with open("%s_%s_score.json"%(conf_name, searcher.name()), 'w') as f:
+        json.dump(dict(results), f)
+        f.close()
+
+
+
     # print pred[:150]
     # print actual[:100]
     # actual_affils = get_affil_based_on_id(actual)
@@ -163,6 +199,11 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
 
     return metrics
 
+
+
+
+
+
 def main():
 
     confs = [
@@ -179,22 +220,27 @@ def main():
             ]
 
     searchers = [
-                    SimpleSearcher(**config.PARAMS),
+                    # SimpleSearcher(**config.PARAMS),
                     # RegressionSearcher(**config.PARAMS),
                     # Searcher(**config.PARAMS),
                     # ProjectedSearcher(**config.PARAMS),
                     # IterProjectedSearcher(**config.PARAMS),
                     # StatSearcher(**config.PARAMS),
-                    # TemporalSearcher(**config.PARAMS)
+                    # TemporalSearcher(**config.PARAMS),
+                    SupervisedSearcher(**config.PARAMS)
                 ]
+
+    bagging_list = ["SimpleSearcher", "MultiLayered", "IterProjectedLayered"]
+    # bagging_list = ["SimpleSearcher", "MultiLayered", "IterProjectedLayered", "StatSearcher", "TemporalSearcher"]
+    # bagging_list = [s.name() for s in searchers]
 
     selected_affils = db.select(fields="id", table="selected_affils")
     # year = []
     year = ["2011", "2012", "2013", "2014"]
     for c in confs :
         # log.info("Running '%s' conf.\n" % c)
-        print "Running on '%s' conf." % c
         ground_truth = calc_ground_truth_score(selected_affils, c) # low coverage
+        print "Running on '%s' conf." % c
 
         # count = 0
         # for k, v in ground_truth:
@@ -259,10 +305,22 @@ def main():
                           'alpha': .9, # .9, 0.4 (easy_search)
                           })
 
+
+            if s.name() == "SupervisedSearcher":
+                s.set_params(**{
+                          # 'H': 0,
+                          # 'age_relev': .0, # .0
+                          # 'alpha': .9, # .9, 0.4 (easy_search)
+                          })
+
+
             rfile = get_results_file(c, s.name())
             get_search_metrics(selected_affils, ground_truth, c, year, s,\
                          exclude_papers=exclude_papers, results_file=rfile)
             del s
+
+        get_search_metrics(selected_affils, ground_truth, c, year, Bagging(),\
+                     exclude_papers=exclude_papers, results_file=None, bagging_list=bagging_list)
         print
 
 

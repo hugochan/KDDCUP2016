@@ -2127,91 +2127,8 @@ class ModelBuilder:
 
 
 
-  # def pred_trends(self, year_trends, end_year='2014'):
-  #   """
-  #   predicate trends and variance based on historical records.
-  #   """
-  #   import pdb;pdb.set_trace()
-  #   count_correct = 0
-  #   new_trends = defaultdict()
-  #   try:
-  #     for stuff, trends in year_trends.items():
-  #       filtered_trends = {year:score for year, score in trends.iteritems() if year <= end_year}
 
-  #       years, scores = zip(*(sorted(filtered_trends.iteritems(), key=lambda d:d[0])))
-
-  #       # find the first one which is larger than 0
-  #       try:
-  #         start_idx = (np.array(scores) > 0).tolist().index(True)
-  #       except:
-  #         continue
-
-  #       start_idx = start_idx - 1 if start_idx > 0 else start_idx # works better in practice
-  #       scores = scores[start_idx:]
-
-  #       # if np.sum(scores[-5:]) < 2:
-  #       #   continue
-
-  #       # variance or fluctuation
-  #       # sigma = np.var(scores)
-
-  #       sigma = np.mean([abs(scores[i] - scores[i + 1]) for i in range(len(scores) - 1)]) if len(scores) > 1 else .0
-
-  #       # trend, 1 stands for going up, -1 stands for going down, 0 stands for keeping stable
-  #       # 1)
-  #       # count how many times of up, down and stable
-  #       # bad idea, trend is much likely to be 0 in the long run
-
-  #       # count_up = np.sum([scores[i] < scores[i + 1] for i in range(len(scores) - 1)])
-  #       # count_down = np.sum([scores[i] > scores[i + 1] for i in range(len(scores) - 1)])
-  #       # count_stable = np.sum([scores[i] == scores[i + 1] for i in range(len(scores) - 1)])
-  #       # count = float(count_up + count_down + count_stable)
-  #       # trend = 1.0 * (count_up/count) - 1.0 * (count_down/count) + .0 * (count_stable/count)
-
-  #       # 2)
-  #       # if current point is above the mean point, goes down, if below, goes up, otherwise, keeps stable
-  #       # works well in practice!
-
-  #       if abs(scores[-1] - np.mean(scores)) <= sigma:
-  #       # if abs((scores[-1] - np.mean(scores)) / np.mean(scores)) <= .4:
-  #         trend = .0
-  #       elif scores[-1] < np.mean(scores):
-  #         # trend = 1.0
-  #         # trend = max((np.mean(scores) - scores[-1]) / np.mean(scores), 1.0)
-  #         trend = min(abs(scores[-1] - np.mean(scores)) / sigma, 1.0)
-  #         # trend = abs(scores[-1] - np.mean(scores)) / sigma
-  #       elif scores[-1] > np.mean(scores):
-  #         # trend = -1.0
-  #         # trend = max((np.mean(scores) - scores[-1]) / np.mean(scores), -1.0)
-  #         trend = -min(abs(scores[-1] - np.mean(scores)) / sigma, 1.0)
-  #         # trend = -abs(scores[-1] - np.mean(scores)) / sigma
-  #       else:
-  #         trend = .0
-
-
-
-  #       if trend > 0 and scores[-1] < year_trends[stuff][str(int(end_year)+1)]:
-  #         count_correct += 1
-  #       elif trend < 0 and scores[-1] > year_trends[stuff][str(int(end_year)+1)]:
-  #         count_correct += 1
-  #       elif trend == 0 and scores[-1] == year_trends[stuff][str(int(end_year)+1)]:
-  #         count_correct += 1
-  #       else:
-  #         # import pdb;pdb.set_trace()
-  #         pass
-
-  #       new_trends[stuff] = trend * sigma
-  #   except Exception,e:
-  #     print e
-  #     import pdb;pdb.set_trace()
-
-  #   print "correct trend pred ratio: %s/%s" % (count_correct, len(new_trends))
-
-  #   return new_trends
-
-
-
-  def pred_trends(self, year_trends, end_year='2014', scalar=.4):
+  def pred_trends(self, year_trends, end_year='2015', scalar=.4):
     """
     predicate trends and variance based on historical records.
     """
@@ -2255,15 +2172,15 @@ class ModelBuilder:
         trend = -min(abs(scores[-1] - np.mean(scores)) / sigma, 1.0)
 
 
-      if trend > 0 and scores[-1] < year_trends[stuff][str(int(end_year)+1)]:
-        count_correct += 1
-      elif trend < 0 and scores[-1] > year_trends[stuff][str(int(end_year)+1)]:
-        count_correct += 1
-      elif trend == 0 and scores[-1] == year_trends[stuff][str(int(end_year)+1)]:
-        count_correct += 1
-      else:
-        # import pdb;pdb.set_trace()
-        pass
+      # if trend > 0 and scores[-1] < year_trends[stuff][str(int(end_year)+1)]:
+      #   count_correct += 1
+      # elif trend < 0 and scores[-1] > year_trends[stuff][str(int(end_year)+1)]:
+      #   count_correct += 1
+      # elif trend == 0 and scores[-1] == year_trends[stuff][str(int(end_year)+1)]:
+      #   count_correct += 1
+      # else:
+      #   # import pdb;pdb.set_trace()
+      #   pass
 
         # # test, assuming we can predict the trends perfectly
         # if scores[-1] < year_trends[stuff][str(int(end_year)+1)]:
@@ -2276,7 +2193,7 @@ class ModelBuilder:
       # scalar .4
       new_trends[stuff] = sigmoid(scalar * trend * sigma / np.mean(scores)) # compute the factor of changes
 
-    print "precision of trend pred: %s/%s" % (count_correct, len(new_trends))
+    # print "precision of trend pred: %s/%s" % (count_correct, len(new_trends))
 
     return new_trends
 
@@ -2370,6 +2287,152 @@ class ModelBuilder:
     return author_scores, author_affils
 
 
+
+  # For SupervisedSearcher approach
+
+  def count_for_affils(self, conf_name, year=[], expand_year=[]):
+    """
+    rating affils based on publications
+    """
+
+    affil_scores = defaultdict(float)
+    affil_authors = defaultdict(set)
+    affil_npapers = defaultdict(float)
+    pub_records = defaultdict()
+
+    if year:
+      records, _, __ = get_selected_expand_pubs(conf_name, year, _type='selected')
+      pub_records.update(records)
+
+
+
+    # expand docs set by getting more papers accepted by the targeted conference
+    if expand_year:
+      conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
+      expand_records, _, __ = get_selected_expand_pubs(conf_id, expand_year, _type='expanded')
+      pub_records.update(expand_records)
+      print 'expanded %s papers.'%len(expand_records)
+
+
+
+    for _, record in pub_records.iteritems():
+      score1 = 1.0 / len(record['author'])
+      for author, affil_ids in record['author'].iteritems():
+        score2 = score1 / len(affil_ids)
+        for each in affil_ids:
+          affil_authors[each].add(author)
+          affil_scores[each] += score2
+
+
+      affil_ids = set([x for _, affil_ids in record['author'].iteritems() for x in affil_ids])
+      for each in affil_ids:
+        affil_npapers[each] += 1.0 # count # of papers
+
+
+
+    return affil_scores, affil_npapers, affil_authors
+
+
+
+
+  def get_features(self, records, feature_list, year):
+    affil_features = defaultdict(dict)
+    wnd = len(year) # size of time window
+
+    for each_year in year:
+      if not each_year in records:
+        continue
+
+      for each_feature in feature_list:
+        if not each_feature in records[str(each_year)]:
+          continue
+
+        for affil, val in records[str(each_year)][each_feature].iteritems():
+            try:
+              if each_feature == 'nauthors':
+                affil_features[affil]["%s_y%s"%(each_feature, wnd)].update(val)
+
+              else:
+                affil_features[affil]["%s_y%s"%(each_feature, wnd)] += val
+
+            except:
+              affil_features[affil]["%s_y%s"%(each_feature, wnd)] = val
+
+
+      if 'nauthors' in feature_list:
+        for affil in affil_features.keys():
+          affil_features[affil]["nauthors_y%s"%wnd] = float(len(affil_features[affil]["nauthors_y%s"%wnd]))
+
+
+    return affil_features
+
+
+
+  def get_all_metadata(self, conf_name, year, expand_conf_year=None, force=True):
+    if force:
+      year_affil_npapers = defaultdict(dict)
+      year_affil_authors = defaultdict(dict)
+      year_affil_scores = defaultdict(dict)
+      year_affil_records = defaultdict(dict)
+
+
+      for each_year in year:
+        affil_scores, affil_npapers, affil_authors = self.count_for_affils(conf_name, each_year)
+        # year_affil_npapers[each_year] = affil_npapers
+        # year_affil_authors[each_year] = affil_authors
+        # year_affil_scores[each_year] = affil_scores
+
+        year_affil_records[str(each_year)] = {'score':affil_scores, 'npapers':affil_npapers, 'author':affil_authors}
+
+
+      # for each affil, we assign a meta record which contains info such as
+      # # of active authors in past 5 years, # of papers in past 5 years, ...
+
+      meta_records = []
+
+
+      year_windows = [1, 2, 5, None] # past 1, 2, 5, all years
+
+      for idx in range(1, len(year)):
+        record = defaultdict()
+
+        # get features
+        for wnd in year_windows:
+          affil_features = self.get_features(year_affil_records, ['npapers', 'nauthors', 'score'], range(int(year[idx])-1, int(year[0])-1, -1)[:wnd])
+          for k, v in affil_features.iteritems():
+            try:
+              record[k].update(v)
+            except:
+              record[k] = v
+
+        # get target
+        affil_target = year_affil_records[str(year[idx])]['score']
+        for k, v in affil_target.iteritems():
+          record[k]['score'] = v
+
+
+        meta_records.extend([v for k, v in record.iteritems()])
+
+      import pdb;pdb.set_trace()
+      with open("meta_records.json", "w") as fp:
+        json.dump(meta_records, fp)
+        fp.close()
+
+    else:
+      with open("meta_records.json", "r") as fp:
+        meta_records = json.load(fp)
+        fp.close()
+
+
+    return meta_records
+
+
+
+
+
+
+
+
 def sigmoid(x):
   return 2 * np.exp(x) / (1 + np.exp(x)) - 1
 
@@ -2386,6 +2449,7 @@ def range_normalize(x):
   xx = dict(zip(x.keys(), vals))
 
   return xx
+
 
 def ezplot(x, y, **kwargs):
   plt.plot(x, y)
