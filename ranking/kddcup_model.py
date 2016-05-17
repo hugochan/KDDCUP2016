@@ -6,6 +6,7 @@ Created on Mar 14, 2016
 
 import chardet
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import networkx as nx
 from mymysql import MyMySQL
@@ -15,6 +16,7 @@ from exceptions import TypeError
 # from pylucene import Index
 import itertools
 import os
+import sys
 import logging as log
 import words
 import config
@@ -22,7 +24,7 @@ import utils
 from datasets.mag import get_selected_docs, get_selected_expand_pubs, get_conf_docs, retrieve_affils_by_authors
 from ranking.kddcup_ranker import rank_single_layer_nodes
 import json
-
+from copy import deepcopy
 
 old_settings = np.seterr(all='warn', over='raise')
 
@@ -2290,7 +2292,7 @@ class ModelBuilder:
 
   # For SupervisedSearcher approach
 
-  def count_for_affils(self, conf_name, year=[], expand_year=[]):
+  def count_for_affils(self, conf_name, year=[], expand_year=[], online_search=False):
     """
     rating affils based on publications
     """
@@ -2301,18 +2303,17 @@ class ModelBuilder:
     pub_records = defaultdict()
 
     if year:
-      records, _, __ = get_selected_expand_pubs(conf_name, year, _type='selected')
+      records, _, __ = get_selected_expand_pubs(conf_name, year, _type='selected', online_search=online_search)
       pub_records.update(records)
 
 
 
-    # expand docs set by getting more papers accepted by the targeted conference
+    # expand docs set by getting more papers accepted by the targeted or related conference
     if expand_year:
       conf_id = db.select("id", "confs", where="abbr_name='%s'"%conf_name, limit=1)[0]
-      expand_records, _, __ = get_selected_expand_pubs(conf_id, expand_year, _type='expanded')
+      expand_records, _, __ = get_selected_expand_pubs(conf_id, expand_year, _type='expanded', online_search=online_search)
       pub_records.update(expand_records)
-      print 'expanded %s papers.'%len(expand_records)
-
+      print 'expanded %s papers from %s.' % (len(expand_records), conf_name)
 
 
     for _, record in pub_records.iteritems():
@@ -2335,12 +2336,11 @@ class ModelBuilder:
 
 
 
-  def get_features(self, records, feature_list, year):
+  def get_features(self, records, feature_list, year, wnd, prefix=''):
     affil_features = defaultdict(dict)
-    wnd = len(year) # size of time window
 
     for each_year in year:
-      if not each_year in records:
+      if not str(each_year) in records:
         continue
 
       for each_feature in feature_list:
@@ -2349,7 +2349,7 @@ class ModelBuilder:
 
         for affil, val in records[str(each_year)][each_feature].iteritems():
             try:
-              if each_feature == 'nauthors':
+              if each_feature == '%snauthors'%prefix:
                 affil_features[affil]["%s_y%s"%(each_feature, wnd)].update(val)
 
               else:
@@ -2359,78 +2359,231 @@ class ModelBuilder:
               affil_features[affil]["%s_y%s"%(each_feature, wnd)] = val
 
 
-      if 'nauthors' in feature_list:
-        for affil in affil_features.keys():
-          affil_features[affil]["nauthors_y%s"%wnd] = float(len(affil_features[affil]["nauthors_y%s"%wnd]))
-
+    if '%snauthors'%prefix in feature_list:
+      for affil in affil_features.keys():
+        try:
+          affil_features[affil]["%snauthors_y%s"%(prefix, wnd)] = float(len(affil_features[affil]["%snauthors_y%s"%(prefix, wnd)]))
+        except Exception,e:
+          print e
 
     return affil_features
 
 
 
-  def get_all_metadata(self, conf_name, year, expand_conf_year=None, force=True):
+  def get_all_metadata(self, conf_name, year, expanded_year=[], expand_conf_year=[], force=True):
     if force:
-      year_affil_npapers = defaultdict(dict)
-      year_affil_authors = defaultdict(dict)
-      year_affil_scores = defaultdict(dict)
       year_affil_records = defaultdict(dict)
+      year_affil_records_otherconfs = defaultdict(dict)
+
 
 
       for each_year in year:
-        affil_scores, affil_npapers, affil_authors = self.count_for_affils(conf_name, each_year)
-        # year_affil_npapers[each_year] = affil_npapers
-        # year_affil_authors[each_year] = affil_authors
-        # year_affil_scores[each_year] = affil_scores
+        affil_scores, affil_npapers, affil_authors = self.count_for_affils(conf_name, str(each_year))
 
-        year_affil_records[str(each_year)] = {'score':affil_scores, 'npapers':affil_npapers, 'author':affil_authors}
+        year_affil_records[str(each_year)] = {'score':affil_scores, 'npapers':affil_npapers, 'nauthors':affil_authors}
+
+
+      for each_year in expanded_year:
+          affil_scores, affil_npapers, affil_authors = self.count_for_affils(conf_name, [], str(each_year))
+
+          year_affil_records[str(each_year)] = {'score':affil_scores, 'npapers':affil_npapers, 'nauthors':affil_authors}
+
+
+      # data from other related conferences
+
+      for conf, conf_years in expand_conf_year:
+        for each_year in conf_years:
+
+          affil_scores, affil_npapers, affil_authors = self.count_for_affils(conf, [], str(each_year))
+
+          year_affil_records_otherconfs[conf][str(each_year)] = {'%s_score'%conf:affil_scores, '%s_npapers'%conf:affil_npapers, '%s_nauthors'%conf:affil_authors}
+
 
 
       # for each affil, we assign a meta record which contains info such as
       # # of active authors in past 5 years, # of papers in past 5 years, ...
 
-      meta_records = []
+      training_records = []
+      testing_records = defaultdict()
 
 
-      year_windows = [1, 2, 5, None] # past 1, 2, 5, all years
+      year_windows = [1, 2, 5] # past 1, 2, 5, all years
 
-      for idx in range(1, len(year)):
-        record = defaultdict()
+      year_list = expanded_year + year
+
+      start_idx = 1
+      # start_idx = max(year_windows)
+
+      for idx in range(start_idx, len(year_list)+1):
+        # each loop is a year
+
+        record = defaultdict(dict)
 
         # get features
         for wnd in year_windows:
-          affil_features = self.get_features(year_affil_records, ['npapers', 'nauthors', 'score'], range(int(year[idx])-1, int(year[0])-1, -1)[:wnd])
+          affil_features = self.get_features(year_affil_records, ['npapers', 'nauthors', 'score'], range(int(year_list[idx-1]), int(year_list[0])-1, -1)[:wnd], wnd)
           for k, v in affil_features.iteritems():
-            try:
-              record[k].update(v)
-            except:
-              record[k] = v
-
-        # get target
-        affil_target = year_affil_records[str(year[idx])]['score']
-        for k, v in affil_target.iteritems():
-          record[k]['score'] = v
+            record[k].update(v)
 
 
-        meta_records.extend([v for k, v in record.iteritems()])
 
-      import pdb;pdb.set_trace()
-      with open("meta_records.json", "w") as fp:
-        json.dump(meta_records, fp)
+          # get features from other confs
+          for conf, vals in year_affil_records_otherconfs.iteritems():
+            affil_features = self.get_features(vals, ['%s_npapers'%conf, '%s_nauthors'%conf, '%s_score'%conf], range(int(year_list[idx-1]), int(year_list[0])-1, -1)[:wnd], wnd, '%s_'%conf)
+            for k, v in affil_features.iteritems():
+              if k in record:
+                record[k].update(v)
+
+
+
+        if idx == len(year_list):
+          testing_records = deepcopy(record)
+
+        else:
+          # get target
+          affil_target = year_affil_records[str(year_list[idx])]['score']
+          for affil in record.keys():
+            record[affil]['score'] = affil_target[affil] if affil in affil_target else .0
+            record[affil]['year_idx'] = idx
+
+          # for k, v in affil_target.iteritems():
+          #   record[k]['score'] = v
+          training_records.extend(record.values())
+
+
+      with open("training_records.json", "w") as fp:
+        json.dump(training_records, fp)
+        fp.close()
+
+      with open("testing_records.json", "w") as fp:
+        json.dump(testing_records, fp)
         fp.close()
 
     else:
-      with open("meta_records.json", "r") as fp:
-        meta_records = json.load(fp)
+      with open("training_records.json", "r") as fp:
+        training_records = json.load(fp)
+        fp.close()
+
+      with open("testing_records.json", "r") as fp:
+        testing_records = json.load(fp)
         fp.close()
 
 
-    return meta_records
+    return training_records, testing_records
+
+
+  def format_data(self, meta_records):
+    df = pd.DataFrame.from_dict(meta_records)
+    df = df.fillna(0) # fill nan
+
+    # df = df - df.mean()
+
+
+    if 'score' in df.columns: # training data
+      y = df.score.values
+      train = df.drop(['score', 'year_idx'], axis=1)
+      return train, y
+    else: # testing data
+        return df
 
 
 
+  # For Learning to rank
+  def generate_training_data(self, meta_records, save_file='formated_training.txt'):
+    """
+    The file format for the training data (also testing/validation data)
+    is the same as for SVM-Rank. This is also the format used in LETOR datasets.
+    Each of the following lines represents one training example and
+    is of the following format:
+    <line> .=. <target> qid:<qid> <feature>:<value> <feature>:<value> ... <feature>:<value> # <info>
+    <target> .=. <positive integer>
+    <qid> .=. <positive integer>
+    <feature> .=. <positive integer>
+    <value> .=. <float>
+    <info> .=. <string>
 
 
+    Here's an example: (taken from the SVM-Rank website). Note that everything after "#" are ignored.
+    3 qid:1 1:1 2:1 3:0 4:0.2 5:0 # 1A
+    2 qid:1 1:0 2:0 3:1 4:0.1 5:1 # 1B
+    1 qid:1 1:0 2:1 3:0 4:0.4 5:0 # 1C
+    """
 
+    # meta_records: [{'year_idx':idx, 'score':score, feature1:val1, },]
+    score_scalar = 10.0
+    try:
+      with open(save_file, 'w') as fp:
+        df = pd.DataFrame.from_dict(meta_records)
+        df = df.fillna(0) # fill nan
+
+        for i, row in df.iterrows(): # each row
+          qid = int(row['year_idx'])
+          score = int(round(row['score'] * score_scalar))
+
+          features = ""
+          ii = 1
+          for k, v in row.iteritems():
+            if k == 'score' or k == 'year_idx':
+              continue
+
+            features += " %s:%s" % (ii, v)
+            ii += 1
+
+          line = "%s qid:%s" % (score, qid) + features + '\n'
+
+          fp.writelines(line)
+
+
+    except Exception, e:
+      print e
+      exit()
+
+    fp.close()
+
+
+  def generate_testing_data(self, meta_records, save_file='formated_testing.txt'):
+    try:
+      with open(save_file, 'w') as fp:
+        df = pd.DataFrame.from_dict(meta_records)
+        df = df.fillna(0) # fill nan
+        qid = 1
+        score = 0
+
+        for i, row in df.iterrows(): # each row
+          features = ""
+          ii = 1
+          for k, v in row.iteritems():
+            if k == 'score' or k == 'year_idx':
+              continue
+
+            features += " %s:%s" % (ii, v)
+            ii += 1
+
+          line = "%s qid:%s" % (score, qid) + features + '\n'
+
+          fp.writelines(line)
+
+
+    except Exception, e:
+      print e
+      exit()
+
+    fp.close()
+
+
+  def read_scorefile(self, file):
+    scores = []
+    try:
+      with open(file, 'r') as fp:
+        for line in fp:
+          scores.append(float(line.strip('\n ')))
+
+    except Exception, e:
+      print e
+      sys.exit()
+
+    fp.close()
+    return scores
 
 
 def sigmoid(x):

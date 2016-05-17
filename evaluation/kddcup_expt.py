@@ -16,7 +16,7 @@ from evaluation.metrics import ndcg2
 from datasets.mag import get_selected_docs
 from ranking.kddcup_searchers import simple_search, SimpleSearcher, RegressionSearcher, \
                     Searcher, ProjectedSearcher, IterProjectedSearcher, StatSearcher, \
-                    TemporalSearcher, Bagging
+                    TemporalSearcher, Bagging, SupervisedSearcher
 
 
 # log.basicConfig(format='%(asctime)s [%(levelname)s] : %(message)s', level=log.INFO)
@@ -135,11 +135,13 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
 
 
     elif searcher.name() == "SupervisedSearcher":
-        expand_year = []
-        # expand_conf_year = [("ICDM", range(2011, 2014))]
+        # expand_year = []
+        expand_year = range(2001, 2011)
+        # expand_conf_year = [("ICDM", range(2001, 2015))]
         expand_conf_year = []
 
-        results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, expand_conf_year, force=True, rtype="affil")
+        # results = searcher.search(selected_affils, conf_name, year, exclude_papers, expand_year, expand_conf_year, force=True, rtype="affil")
+        results = searcher.learn2rank_search(selected_affils, conf_name, year, exclude_papers, expand_year, expand_conf_year, force=True, rtype="affil")
 
 
     elif searcher.name() == "Bagging":
@@ -156,15 +158,15 @@ def get_search_metrics(selected_affils, ground_truth, conf_name, year, searcher,
     actual, relevs = zip(*ground_truth)
     pred = zip(*results)[0]
 
-    # write to disk
-    with open("%s_%s.json"%(conf_name, searcher.name()), 'w') as f:
-        json.dump(dict(zip(pred, range(len(pred)))), f)
-        f.close()
+    # # write to disk
+    # with open("%s_%s.json"%(conf_name, searcher.name()), 'w') as f:
+    #     json.dump(dict(zip(pred, range(len(pred)))), f)
+    #     f.close()
 
 
-    with open("%s_%s_score.json"%(conf_name, searcher.name()), 'w') as f:
-        json.dump(dict(results), f)
-        f.close()
+    # with open("%s_%s_score.json"%(conf_name, searcher.name()), 'w') as f:
+    #     json.dump(dict(results), f)
+    #     f.close()
 
 
 
@@ -308,9 +310,9 @@ def main():
 
             if s.name() == "SupervisedSearcher":
                 s.set_params(**{
-                          # 'H': 0,
-                          # 'age_relev': .0, # .0
-                          # 'alpha': .9, # .9, 0.4 (easy_search)
+                          'H': 0,
+                          'age_relev': .0, # .0
+                          'alpha': .9, # .9, 0.4 (easy_search)
                           })
 
 
@@ -319,8 +321,8 @@ def main():
                          exclude_papers=exclude_papers, results_file=rfile)
             del s
 
-        get_search_metrics(selected_affils, ground_truth, c, year, Bagging(),\
-                     exclude_papers=exclude_papers, results_file=None, bagging_list=bagging_list)
+        # get_search_metrics(selected_affils, ground_truth, c, year, Bagging(),\
+        #              exclude_papers=exclude_papers, results_file=None, bagging_list=bagging_list)
         print
 
 

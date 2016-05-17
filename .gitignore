@@ -5,3 +5,5 @@
 *.json
 *.dat
 /img
+*.txt
+*.bak*

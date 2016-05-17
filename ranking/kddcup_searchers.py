@@ -7,12 +7,14 @@ Created on Mar 14, 2016
 from datasets.mag import get_selected_expand_pubs
 from ranking.kddcup_ranker import rank_nodes, rank_single_layer_nodes, rank_author_affil_nodes, \
             rank_projected_nodes, rank_paper_author_affil_nodes, rank_nodes_mle, rank_nodes_stat, avg_scores
+from ranking.kddcup_regression import linear_regression, boosted_trees
 import kddcup_model
 import utils
 import config
 
 from collections import defaultdict, OrderedDict
 import os
+import sys
 import json
 import networkx as nx
 import numpy as np
@@ -20,6 +22,11 @@ from mymysql.mymysql import MyMySQL
 
 from sklearn.linear_model import LinearRegression, BayesianRidge, TheilSenRegressor, RANSACRegressor
 from sklearn.preprocessing import PolynomialFeatures
+from sklearn.metrics import r2_score, mean_absolute_error
+from sklearn.cross_validation import StratifiedKFold
+from subprocess import call
+
+
 
 
 
@@ -743,19 +750,138 @@ class SupervisedSearcher:
     Basic searcher class for the supervised learning model.
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, **params):
+        self.params = params
+        self.save = True
 
     def name(self):
         return "SupervisedSearcher"
 
+    def set_params(self, **params):
+        for k, v in params.items():
+            self.params[k] = v
+
+    def set_param(self, name, value):
+        self.params[name] = value
+
 
     def search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], expand_conf_year=[], rtype="affil", force=False):
         builder = kddcup_model.ModelBuilder()
-        builder.get_all_metadata(conf_name, year)
+        training_records, testing_records = builder.get_all_metadata(conf_name, year, \
+                                expanded_year, expand_conf_year, force=True)
+        # import pdb;pdb.set_trace()
+        train_X, train_Y = builder.format_data(training_records)
 
-        return
 
+
+        # # evaluation
+        # nfolds = 5
+        # random_state = 0
+        # skf = StratifiedKFold(train_Y   , n_folds=nfolds, shuffle=True, random_state=random_state)
+
+        # avg_r2 = 0.0
+        # avg_abs = 0.0
+
+        # for each_train, each_test in skf:
+        #     # pred = linear_regression(train_X.iloc[each_train], train_Y[each_train], train_X.iloc[each_test])
+        #     pred = boosted_trees(train_X.iloc[each_train], train_Y[each_train], train_X.iloc[each_test])
+
+        #     avg_r2 += r2_score(train_Y[each_test], pred, multioutput='uniform_average')
+        #     avg_abs += mean_absolute_error(train_Y[each_test], pred, multioutput='uniform_average')
+
+        # print "On evaluation data set:"
+        # print "average r2 score: %s" % (avg_r2 / nfolds)
+        # print "average absolute error: %s" % (avg_abs / nfolds)
+
+
+        # real test
+        affil_ids = testing_records.keys()
+        test_X = builder.format_data(testing_records.values())
+
+
+        pred = linear_regression(train_X, train_Y, test_X)
+        # pred = boosted_trees(train_X, train_Y, test_X)
+
+
+        affil_scores = dict(zip(affil_ids, pred))
+
+        results = get_selected_nodes(affil_scores, selected_affils)
+
+
+        return results
+
+
+
+    def learn2rank_search(self, selected_affils, conf_name, year, exclude_papers=[], expanded_year=[], expand_conf_year=[], rtype="affil", force=False):
+        """
+        Learning to rank algorithms:
+        0: MART (gradient boosted regression tree)
+        1: RankNet
+        2: RankBoost
+        3: AdaRank
+        4: Coordinate Ascent
+        6: LambdaMART
+        7: ListNet
+        8: Random Forests
+        """
+        builder = kddcup_model.ModelBuilder()
+        training_records, testing_records = builder.get_all_metadata(conf_name, year, \
+                                expanded_year, expand_conf_year, force=False)
+
+
+        alg = 3
+        workspace = "../RankLib-v2.1"
+        model_dir = "%s/models" % workspace
+        save_model = "%s/model_%s.txt" %(model_dir, alg)
+        train_file = "%s/%s_formated_training.txt"%(workspace, conf_name)
+        test_file = "%s/%s_formated_testing.txt"%(workspace, conf_name)
+        save_score = "scorefile.txt"
+
+        builder.generate_training_data(training_records, train_file)
+        builder.generate_testing_data(testing_records.values(), test_file)
+
+
+
+
+        train_cmd = "java -jar %s/bin/RankLib.jar -train %s -ranker %s  -gmax 200  -tvs 0.8 -metric2t NDCG@20 -save %s" \
+                        % (workspace, train_file, alg, save_model)
+
+        rank_cmd = "java -jar %s/bin/RankLib.jar -load %s -rank %s -score %s" \
+                        % (workspace, save_model, test_file, save_score)
+
+
+        try:
+            if not os.path.exists(model_dir):
+                os.makedirs(model_dir)
+
+            call(train_cmd.split(), cwd='./')
+            print "running", train_cmd
+
+            call(rank_cmd.split(), cwd='./')
+
+            print "running", rank_cmd
+
+        except Exception as e:
+            print e
+            sys.exit()
+
+
+
+        # real test
+        affil_ids = testing_records.keys()
+
+        # read score file
+        pred = builder.read_scorefile(save_score)
+
+
+        # import pdb;pdb.set_trace()
+        affil_scores = dict(zip(affil_ids, pred))
+
+
+        results = get_selected_nodes(affil_scores, selected_affils)
+
+
+        return results
 
 
 class Bagging:
